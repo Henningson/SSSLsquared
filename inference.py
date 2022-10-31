@@ -5,23 +5,10 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import Losses
-import utils
 import time
 from dataset import HLEDataset
 from torch.utils.data import DataLoader
 from model import SPLSS, LSQLocalization
-from utils import (
-    class_to_color,
-    load_checkpoint,
-    save_checkpoint,
-    check_accuracy,
-    save_predictions_as_imgs,
-    draw_points,
-    draw_heatmap
-)
-import cProfile
-import pstats
 import Visualizer
 
 # Hyperparameters etc.
@@ -54,7 +41,7 @@ def main():
         keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("test_net.pth.tar")).to(DEVICE)
+    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("assets/pretrained.pth.tar")).to(DEVICE)
     val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
     vis = Visualizer.Visualize2D(batched=True, x=4, y=1)
@@ -76,22 +63,13 @@ def main():
             #torch.cuda.synchronize()
             segmentation = model(images).softmax(dim=1)
             sigma, mean, amplitude = loc.test(segmentation)
-            #segmentation = segmentation.softmax(dim=1)
-            #torch.cuda.synchronize()
-            #print(time.time() - t0)
-            #torch.cuda.synchronize()
 
-            #vis.draw_heatmap(segmentation, heatmapaxis=1)
-            #vis.show()
-            #torch.cuda.synchronize()
-            #t0 = time.time()
-            #torch.cuda.synchronize()
-            #torch.cuda.synchronize()
-            #print(time.time() - t0)
-            #torch.cuda.synchronize()
-            #vis.draw_heatmap(segmentation, heatmapaxis=0)
+            #segmentation = segmentation.argmax(dim=1)
             vis.draw_images(images)
-            vis.draw_points(mean)
+            vis.draw_segmentation(segmentation.argmax(dim=1), 3, opacity=0.8)
+            #vis.draw_heatmap(segmentation, heatmapaxis=1)
+            #vis.draw_images(images)
+            #vis.draw_points(mean)
             vis.show()
 
 

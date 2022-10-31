@@ -73,6 +73,18 @@ def class_to_color(prediction, class_colors, device='cuda'):
 
     return output
 
+
+def class_to_color_np(prediction, class_colors):
+    prediction = np.expand_dims(prediction, 0)
+    output = np.zeros(prediction.shape[0], 3, prediction.size(-2), prediction.size(-1))
+    for class_idx, color in enumerate(class_colors):
+        mask = class_idx == torch.max(prediction, dim=1)[0]
+        curr_color = color.reshape(1, 3, 1, 1)
+        segment = mask*curr_color # should have shape 1, 3, 100, 100
+        output += segment
+
+    return output
+
 def draw_points(gt_image, gt_points, pred_points):
     blank = gt_image.copy()*255
 
