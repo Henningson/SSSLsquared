@@ -1,24 +1,7 @@
-
-import os, sys, glob
-from functools import partial
-from PyQt5 import QtCore, QtSql
-from PyQt5.QtGui import QPixmap, QTransform, QImage
-from os.path import expanduser, dirname
-from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QMenu, QLabel, QFileDialog, QHBoxLayout, QGridLayout
-import skvideo.io
+from PyQt5 import QtCore
+from PyQt5.QtCore import QSize, pyqtSignal
+from PyQt5.QtWidgets import QMainWindow, QApplication, QGridLayout, QWidget, QPushButton
 import sys
-from PyQt5 import QtCore, QtWidgets
-from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction, QGraphicsPolygonItem, QGraphicsEllipseItem, QDialog
-from PyQt5.QtCore import QSize, pyqtSignal, QPointF
-from PyQt5.QtGui import QIcon, QPen, QBrush, QPolygonF, QColor
-import torch
-from model import SPLSS, LSQLocalization
-import numpy as np
-import cv2
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-from tqdm import tqdm
-import Visualizer
 
 class MainWindow(QMainWindow):  
     def __init__(self):
