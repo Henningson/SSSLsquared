@@ -3,6 +3,9 @@ from PIL import Image
 from torch.utils.data import Dataset
 import numpy as np
 import torch
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+
 
 class HLEDataset(Dataset):
     def __init__(self, base_path, keys, transform=None, is_train=True, train_test_split=0.9, pad_to=150):
@@ -73,3 +76,97 @@ class HLEDataset(Dataset):
 
 
         return image, x, keypoints
+
+
+class VideoDataset(Dataset):
+    def __init__(self, path, videoname):
+        self.image_dir = os.path.join(path, "png/")
+        self.video_file = os.path.join(path, videoname)
+
+        if not os.path.isdir(self.image_dir):
+            if not os.path.isfile(self.video_file):
+                assert FileNotFoundError("File: {0} does not exist.".format(self.video_file))
+
+                self.create_image_data(self.image_dir, self.video_file)
+
+
+        self.images = self.make_list(self.image_dir)
+
+
+        self.transform = A.Compose(
+        [
+            A.Resize(height=512, width=256),
+            A.Normalize(
+                mean=[0.0],
+                std=[1.0],
+                max_pixel_value=255.0,
+            ),
+            ToTensorV2(),
+        ]
+        )
+
+    def make_list(self, directory):
+        return [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
+
+    def create_image_data(self, image_dir, video_file):
+        print("ffmpeg -i {0} {1}/%05d.png".format(video_file, image_dir))
+        os.system("ffmpeg -i {0} {1}%05d.png".format(video_file, image_dir))
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
+        
+        if self.transform is not None:
+            augmentations = self.transform(image=image)
+            image = augmentations["image"]
+        
+        return image
+
+
+
+class ReinhardDataset(Dataset):
+    def __init__(self, base_path, transform=None, is_train=True, train_test_split=0.9):
+        self.image_dir = os.path.join(base_path, "png/")
+        self.laserpoints_dir = os.path.join(base_path, "laserpoints/")
+        self.transform = transform
+
+        self.is_train = is_train
+        self.train_test_split = 0.9
+
+        self.images = self.make_list(self.image_dir)
+        self.laserpoints = self.make_list(self.laserpoints_dir)
+
+    def make_list(self, directory):
+        file_list = [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
+
+        if self.is_train:
+            file_list = file_list[:int(len(file_list) * self.train_test_split)]
+        else:
+            file_list = file_list[int(len(file_list) * self.train_test_split):]
+
+        return file_list
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        mask_path = self.laserpoints[index]
+
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
+        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        mask[mask == 255.0] = 1.0
+
+        if self.transform is not None:
+            augmentations = self.transform(image=image, mask=mask)
+            image = augmentations["image"]
+            mask = augmentations["mask"]
+
+        # Set class labels
+        x = np.zeros(mask.shape, dtype=np.float32)
+        x[mask == 1.0] = 1
+
+        return image, x

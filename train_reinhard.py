@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEDataset
+from dataset import HLEDataset, ReinhardDataset
 from torch.utils.data import DataLoader
 from model import SPLSS, LSQLocalization
 from utils import (
@@ -17,22 +17,19 @@ from utils import (
     draw_points,
     draw_heatmap
 )
+import Visualizer
 
 # Hyperparameters etc.
 LEARNING_RATE = 1e-5
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 8
+BATCH_SIZE = 1
 NUM_EPOCHS = 10
 NUM_WORKERS = 2
-NUM_SAMPLEPOINTS = 100
-LAMBDAS = [1.0, 1.0, 1.0]
-IMAGE_HEIGHT = 512  # 1280 originally
-IMAGE_WIDTH = 256  # 1918 originally
+IMAGE_HEIGHT = 1200  # 1280 originally
+IMAGE_WIDTH = 800 # 1918 originally
 PIN_MEMORY = True
 LOAD_MODEL = False
-DATASET_BASE_DIR = "../HLEDataset/dataset/"
-DATASET_TRAIN_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
-DATASET_VALIDATION_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
+DATASET_BASE_DIR = "data/"
 
 def main():
     train_transform = A.Compose(
@@ -47,8 +44,7 @@ def main():
                 max_pixel_value=255.0,
             ),
             ToTensorV2(),
-        ],
-        keypoint_params=A.KeypointParams(format='xy')
+        ]
     )
 
     val_transforms = A.Compose(
@@ -60,50 +56,46 @@ def main():
                 max_pixel_value=255.0,
             ),
             ToTensorV2(),
-        ],
-        keypoint_params=A.KeypointParams(format='xy')
+        ]
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("my_checkpoint.pth.tar")).to(DEVICE)
-    CELoss = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 1.0, 1.0], dtype=torch.float32, device=DEVICE))
-    #CHMLoss = Losses.torch_loss_cHM()
-    #L2Loss = nn.MSELoss()
+    model = SPLSS(in_channels=1, out_channels=2).to(DEVICE)
+    BCELoss = nn.CrossEntropyLoss()
+    loc = LSQLocalization(window_size=21)
 
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    train_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_TRAIN_KEYS, transform=train_transform, is_train=True, pad_to=NUM_SAMPLEPOINTS)
+    train_ds = ReinhardDataset(base_path=DATASET_BASE_DIR, transform=train_transform, is_train=True)
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=True)
-    val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
+    val_ds = ReinhardDataset(base_path=DATASET_BASE_DIR, transform=val_transforms, is_train=False)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
 
+    visual = Visualizer.Visualize2D(x=1)
     scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(NUM_EPOCHS):
         
-        #if epoch % 5 == 0:
-        #    with torch.no_grad():
-        #        val_image, gt_seg, gt_points = val_ds[0]
+        if epoch > 0 and epoch % 5 == 0:
+            with torch.no_grad():
+                val_image, gt_seg = val_ds[0]
 
-        #        pred_seg = model(val_image.unsqueeze(0).cuda())
-                #pred_seg = pred_seg.argmax(axis=1)
+                pred_seg = model(val_image.unsqueeze(0).cuda())
+                pred_seg = pred_seg.softmax(dim=1)
+                _, mean, _ = loc.test(pred_seg)
 
-                #pred_im = class_to_color(pred_seg, [torch.tensor([0, 0, 0], device=DEVICE), torch.tensor([0, 255, 0], device=DEVICE)])
-                #draw_points(val_image.detach().cpu().numpy(), gt_points.detach().cpu().numpy(), pred_points.detach().cpu().numpy())
-        #        loc = LSQLocalization(window_size=5)
-        #        loc.test(pred_seg)
-        #        draw_heatmap(pred_seg, axis=1)
+                visual.draw_images(val_image.unsqueeze(0)*255)
+                visual.draw_points(mean)
+                visual.show()
     
         loop = tqdm(train_loader)
-        for images, gt_seg, gt_points in loop:
+        for images, gt_seg in loop:
             images = images.to(device=DEVICE)
             gt_seg = gt_seg.to(device=DEVICE)
-            gt_points = gt_points.to(device=DEVICE)
 
             # forward
             with torch.cuda.amp.autocast():
                 segmentation = model(images)
-                loss_CE = CELoss(segmentation.float(), gt_seg.long())
-                loss = loss_CE*LAMBDAS[0]
+                loss = BCELoss(segmentation.float(), gt_seg.long())
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
@@ -114,7 +106,7 @@ def main():
             loop.set_postfix(loss=loss.item())
 
         checkpoint = {"optimizer": optimizer.state_dict(),} | model.get_statedict()
-        torch.save(checkpoint, "test_net.pth.tar")
+        torch.save(checkpoint, "reinhardnetv2.pth.tar")
 
 
 

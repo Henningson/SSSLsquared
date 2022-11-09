@@ -39,7 +39,6 @@ class VideoDataset(Dataset):
         return [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
 
     def create_image_data(self, image_dir, video_file):
-        #os.mkdir(image_dir)
         print("ffmpeg -i {0} {1}/%05d.png".format(video_file, image_dir))
         os.system("ffmpeg -i {0} {1}%05d.png".format(video_file, image_dir))
 

@@ -123,25 +123,29 @@ class LocalizationModule(nn.Module):
         return torch.tensor_split(sigma, split_indices), torch.tensor_split(mu, split_indices), torch.tensor_split(amplitude, split_indices)
 
 class LSQLocalization:
-    def __init__(self, order=2, window_size=3, heatmapaxis=1, threshold=0.5):
+    def __init__(self, order=2, gauss_window=5, local_maxima_window=11, heatmapaxis=1, threshold=0.5):
         super(LSQLocalization, self).__init__()
         self.order = order
-        self.window_size = window_size
-        self.pad = window_size // 2
+
+        self.local_maxima_window_size = local_maxima_window
+        self.gauss_window_size = gauss_window
+        self.pad = self.gauss_window_size // 2
+        
+        
         self.heatmapaxis = heatmapaxis
         self.gauss_blur_sigma = 1.5
         self.threshold = threshold
         
-        self.kernel = torch.ones(self.window_size, self.window_size).to(DEVICE)
-        self.kernel[self.window_size//2, self.window_size//2] = 0
+        self.kernel = torch.ones(self.local_maxima_window_size, self.local_maxima_window_size).to(DEVICE)
+        self.kernel[self.local_maxima_window_size//2, self.local_maxima_window_size//2] = 0
 
 
-        sub = torch.linspace(-window_size//2 + 1, window_size//2, window_size)
+        sub = torch.linspace(-self.gauss_window_size//2 + 1, self.gauss_window_size//2, self.gauss_window_size)
         x_sub, y_sub = torch.meshgrid(sub, sub, indexing="xy")
         self.x_sub = x_sub.unsqueeze(0).to(DEVICE)
         self.y_sub = y_sub.unsqueeze(0).to(DEVICE)
 
-    def test(self, x):
+    def test(self, x, segmentation=None):
         heat = x[:, self.heatmapaxis, :, :].clone()
         heat = heat.unsqueeze(1)
 
@@ -153,19 +157,22 @@ class LSQLocalization:
         local_maxima = threshed_heat > dilated_heat
         local_maxima = local_maxima[:, 0, :, :]
 
+        if segmentation is not None:
+            local_maxima = local_maxima * segmentation
+
         # Find local maxima and indices at which we need to split the data
         maxima_indices = local_maxima.nonzero()
         split_indices = get_split_indices(maxima_indices[:, 0]).tolist()
 
         # Extract windows around the local maxima
-        intensities, y_windows, x_windows = utils.extractWindow(heat[:, 0, :, :], maxima_indices, self.window_size)
+        intensities, y_windows, x_windows = utils.extractWindow(heat[:, 0, :, :], maxima_indices, self.gauss_window_size)
 
         # Reformat [-2, -1, 0, ..] tensors for x-y-indexing
-        reformat_x = self.x_sub.repeat(x_windows.size(0), 1, 1).reshape(-1, self.window_size**2)
-        reformat_y = self.y_sub.repeat(y_windows.size(0), 1, 1).reshape(-1, self.window_size**2)
+        reformat_x = self.x_sub.repeat(x_windows.size(0), 1, 1).reshape(-1, self.gauss_window_size**2)
+        reformat_y = self.y_sub.repeat(y_windows.size(0), 1, 1).reshape(-1, self.gauss_window_size**2)
 
         # Use Guos Weighted Gaussian Fitting algorithm based on the intensities of the non-thresholded image
-        sigma, mu, amplitude = GuosBatchAnalytic(reformat_x, reformat_y, intensities.reshape(-1, self.window_size**2))
+        sigma, mu, amplitude = GuosBatchAnalytic(reformat_x, reformat_y, intensities.reshape(-1, self.gauss_window_size**2))
 
         # Add found mus to the initial quantized local maxima
         mu = maxima_indices[:, 1:] + mu[:, [1, 0]]

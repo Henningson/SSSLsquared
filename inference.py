@@ -41,7 +41,7 @@ def main():
         keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("assets/pretrained.pth.tar")).to(DEVICE)
+    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("pretrained.pth.tar")).to(DEVICE)
     val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
     vis = Visualizer.Visualize2D(batched=True, x=4, y=1)
