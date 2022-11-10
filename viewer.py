@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 '''
-shufti 2.4
-The persistent image viewer
-By Dan MacDonald 2017-2020
-shufti is free software. You can use, redistribute it and/or modify it under the terms of the included LICENSE file which is based on the BSD-2-Clause license.
-Usage:
-$ shufti.py /path/to/image slideshow-delay-in-milliseconds
-The slideshow delay value (milliseconds) is optional and defaults to 4000 ms ie a 4 second delay when slideshow mode is active.
-You may want to associate shufti with image files in your file manager rather than use it from the terminal.
+"Segment Images"
+"Generate Points"
+"Remove Points"
+"Add Points"
+"Remove Bounding Boxes"
+"Compute Correspondences"
+"Show Bounding Boxes"
+"Show Pointlabels"
 '''
 
 import os, sys, glob
@@ -16,12 +16,12 @@ from functools import partial
 from PyQt5 import QtCore, QtSql
 from PyQt5.QtGui import QPixmap, QTransform, QImage
 from os.path import expanduser, dirname
-from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QMenu, QLabel, QFileDialog, QHBoxLayout, QGridLayout
+from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QMenu, QLabel, QFileDialog, QHBoxLayout, QGraphicsRectItem, QGridLayout
 import skvideo.io
 import sys
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction, QGraphicsPolygonItem, QGraphicsEllipseItem
-from PyQt5.QtCore import QSize, pyqtSignal, QPointF
+from PyQt5.QtCore import QSize, pyqtSignal, QPointF, QRectF
 from PyQt5.QtGui import QIcon, QPen, QBrush, QPolygonF, QColor
 import torch
 from model import SPLSS, LSQLocalization
@@ -77,6 +77,8 @@ class ZoomableView(QGraphicsView):
         super().mousePressEvent(event)
         point = self.mapToScene(self.mapFromGlobal(event.globalPos()))
         
+        print(type(self.scene().itemAt(point, QTransform())))
+
         if not self.pointRemovalMode:
             self.pointSignal.emit(point)
         elif type(self.scene().itemAt(point, QTransform())) == QGraphicsEllipseItem:
@@ -137,13 +139,22 @@ class MainWindow(QMainWindow):
 
         self.segmentation_mode = False
         self.pointAddMode = False
+        self.removeBoundingBoxMode = False
+        self.boundingBoxMode = False
 
         self.menu_widget.button_dict["Segment Images"].clicked.connect(self.toggleSegmentation)
         self.menu_widget.button_dict["Generate Points"].clicked.connect(self.generatePoints)
         self.menu_widget.button_dict["Remove Points"].clicked.connect(self.view.togglePointRemovalMode)
         self.menu_widget.button_dict["Add Points"].clicked.connect(self.togglePointAddMode)
+        self.menu_widget.buttonGrid.buttonSignal.connect(self.getGridButtonClicked)
+        self.menu_widget.button_dict["Compute Correspondences"].clicked.connect(self.computeCorrespondences)
+        self.menu_widget.button_dict["Remove Bounding Boxes"].clicked.connect(self.toggleRemoveBoundingBoxMode)
+        self.menu_widget.button_dict["Show Bounding Boxes"].clicked.connect(self.toggleShowBoundingBoxes)
+        self.menu_widget.button_dict["Show Pointlabels"].clicked.connect(self.toggleShowLabels)
+
 
         self.points2d = []
+        self.labels = []
         self.polygon_points = []
         self.segmentationPoints = []
         self.segmentation = None
@@ -151,8 +162,102 @@ class MainWindow(QMainWindow):
         self.view.pointSignal.connect(self.segmentationPointAdded)
         self.view.removePointSignal.connect(self.removePoint)
         self.view.pointSignal.connect(self.addPoint)
+        self.view.pointSignal.connect(self.generateBoundingBox)
+        self.view.pointSignal.connect(self.removeBoundingBox)
+
+        self.showBoundingBoxes = True
+        self.showLabels = True
+
+        self.boundingBoxTuple = [None, None]
+        self.boundingBoxes = []
+        self.boundingBoxIndex = 0
+        self.currentButton = [0, 0]
 
         self.polygonhandle = None
+
+        self.pointArray = np.zeros([self.video.shape[0], 18, 18, 2], dtype=np.float32)
+        self.pointArray[:] = np.nan
+
+    def toggleRemoveBoundingBoxMode(self):
+        self.removeBoundingBoxMode = not self.removeBoundingBoxMode
+
+        if self.removeBoundingBoxMode:
+            self.menu_widget.disableEverythingExcept("Remove Bounding Boxes")
+        else:
+            self.menu_widget.enableEverything()
+
+    def toggleShowBoundingBoxes(self):
+        self.showBoundingBoxes = not self.showBoundingBoxes
+        self.redraw()
+
+    def computeCorrespondences(self):
+
+        # Go through every frame
+        for perFramePoints in self.points2d:
+            self.labels.append([])
+
+            # For every bounding box
+            for boundingbox in self.boundingBoxes:
+                # And for every point inside this frame
+                for i in range(perFramePoints.shape[0]):
+                    # Check if the bounding box contains the point (point is ordered in opencv Y, X fashion)
+                    if boundingbox.contains(perFramePoints[i, 1], perFramePoints[i, 0]):
+                        self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 1]
+                        self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 0]
+                        self.labels[-1].append([boundingbox.x, boundingbox.y])
+        
+        #np.save("labeledpoints.np", )
+
+    def toggleShowLabels(self):
+        self.showLabels = not self.showLabels
+
+    def toggleBoundingBoxMode(self):
+        self.boundingBoxMode = not self.boundingBoxMode
+
+        if self.boundingBoxMode:
+            self.menu_widget.disableEverythingExcept("")
+        else:
+            self.menu_widget.enableEverything()
+
+    QtCore.pyqtSlot(QPointF)
+    def generateBoundingBox(self, point):
+        if not self.boundingBoxMode:
+            return
+
+        if self.boundingBoxIndex == 0:
+            self.boundingBoxTuple[0] = point
+            self.boundingBoxIndex = 1
+            return
+
+        if self.boundingBoxIndex == 1:
+            self.boundingBoxTuple[1] = point
+            self.boundingBoxIndex = 0
+
+        x = self.currentButton[0]
+        y = self.currentButton[1]
+
+        self.boundingBoxes.append(IdentifiableRectItem(self.boundingBoxTuple[0].toPoint(), self.boundingBoxTuple[1].toPoint(), x, y))
+        self.toggleBoundingBoxMode()
+        self.redraw()
+
+    @QtCore.pyqtSlot(QPointF)
+    def removeBoundingBox(self, point):
+        if not self.removeBoundingBoxMode:
+            return
+
+        for boundingBox in self.boundingBoxes:
+            item = self.scene.itemAt(point, QTransform())
+            if type(item) == QGraphicsRectItem and boundingBox.isEqualsToQGraphicsRect(item):
+                self.boundingBoxes.remove(boundingBox)
+
+        self.redraw()
+
+    @QtCore.pyqtSlot(int, int)
+    def getGridButtonClicked(self, x, y):
+        print("Setting laser point {} {}".format(x, y))
+        self.currentButton = (x, y)
+        self.boundingBoxIndex = 0
+        self.toggleBoundingBoxMode()
     
     @QtCore.pyqtSlot(QPointF)
     def segmentationPointAdded(self, point):
@@ -181,6 +286,11 @@ class MainWindow(QMainWindow):
     def togglePointAddMode(self):
         self.pointAddMode = not self.pointAddMode
 
+        if self.pointAddMode:
+            self.menu_widget.disableEverythingExcept("Add Points")
+        else:
+            self.menu_widget.enableEverything()
+
     @QtCore.pyqtSlot(QPointF)
     def addPoint(self, clicked_point):
         if not self.pointAddMode:
@@ -188,11 +298,17 @@ class MainWindow(QMainWindow):
 
         point = np.array([clicked_point.y(), clicked_point.x()])
         self.points2d[self.current_img_index] = np.concatenate([self.points2d[self.current_img_index], point.reshape(-1, 2)])
-
-        self.scene.addEllipse(point[1] - self.pointsize//2, point[0] - self.pointsize//2, self.pointsize, self.pointsize, QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
+        self.redraw()
+        #self.scene.addEllipse(point[1] - self.pointsize//2, point[0] - self.pointsize//2, self.pointsize, self.pointsize, QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
 
     def toggleSegmentation(self):
         self.segmentation_mode = not self.segmentation_mode
+
+        if self.segmentation_mode:
+            self.menu_widget.disableEverythingExcept("Segment Images")
+        else:
+            self.menu_widget.enableEverything()
+
 
         if len(self.segmentationPoints) > 2:
             self.generateCVSegmentation()
@@ -203,6 +319,21 @@ class MainWindow(QMainWindow):
 
         self.polygonhandle = self.scene.addPolygon(QPolygonF(self.segmentationPoints), QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
 
+    def drawBoundingBoxes(self):
+        for bounding_box in self.boundingBoxes:
+            self.scene.addRect(bounding_box, QPen(QColor(128, 255, 128, 128)), QBrush(QColor(128, 255, 128, 128)))
+
+    def drawLabels(self):
+        try:
+            for label, pos in zip(self.labels[self.current_img_index], self.points2d[self.current_img_index].tolist()):
+                if np.isnan(np.array(pos)).any():
+                    continue
+
+                text = self.scene.addText("{},{}".format(label[0], label[1]))
+                text.setPos(pos[1], pos[0])
+                text.setDefaultTextColor(QColor(255, 128, 128, 255))
+        except:
+            return
 
     def generateCVSegmentation(self):
         base = np.zeros((self.video[0].shape[0], self.video[0].shape[1]), dtype=np.uint8)
@@ -230,7 +361,9 @@ class MainWindow(QMainWindow):
                     prediction = model(image.unsqueeze(0)).softmax(dim=1)
                     _, mean, _ = loc.test(prediction, segmentation=segment)
 
-                    self.points2d.append(mean[0].detach().cpu().numpy())
+                    means = mean[0].detach().cpu().numpy()
+
+                    self.points2d.append(means[~np.isnan(means).any(axis=1)])
 
         self.redraw()
 
@@ -243,11 +376,6 @@ class MainWindow(QMainWindow):
         for point in self.points2d[self.current_img_index].tolist():
             self.scene.addEllipse(point[1] - self.pointsize//2, point[0] - self.pointsize//2, self.pointsize, self.pointsize, QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
 
-
-    def resizeEvent(self, resizeEvent):
-        width = self.frameGeometry().width()
-        height = self.frameGeometry().height()
-        #self.view.resize(width + 2, height + 2)
 
     def closeEvent(self, event):
         self.winState()
@@ -275,12 +403,6 @@ class MainWindow(QMainWindow):
             self.showNormal()
         else:
             self.showFullScreen()
-
-    def toggleSlideshow(self):
-        if self.slideshowTimer.isActive():
-            self.slideshowTimer.stop()
-        else:
-            self.slideshowTimer.start(self.slideTime)
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_F11:
@@ -345,11 +467,23 @@ class MainWindow(QMainWindow):
         self.scene.addPixmap(self.img)
         self.draw_point_estimates()
 
+        if self.showBoundingBoxes:
+            self.drawBoundingBoxes()
+
+        if self.showLabels:
+            self.drawLabels()
+
     def redraw(self):
         self.scene.clear()
         self.img = QPixmap(cvImgToQT(self.video[self.current_img_index]))
         self.scene.addPixmap(self.img)
         self.draw_point_estimates()
+        
+        if self.showBoundingBoxes:
+            self.drawBoundingBoxes()
+
+        if self.showLabels:
+            self.drawLabels()
 
     def resetScroll(self):
         self.view.verticalScrollBar().setValue(0)
@@ -362,55 +496,53 @@ class MainWindow(QMainWindow):
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton
+from gridbuttonclick import ButtonGrid
 
 class LeftMenuWidget(QWidget):
     def __init__(self, parent=None):
         super(LeftMenuWidget, self).__init__()
         #self.setStyle(QFrame.Panel | QFrame.Raised)
-        self.base_layout = QVBoxLayout()
-        self.base_layout.setAlignment(Qt.AlignTop)
-        self.setLayout(self.base_layout)
+        self.setLayout(QVBoxLayout())
+        self.layout().setAlignment(Qt.AlignTop)
         self.button_dict = {}
+        self.buttonGrid = ButtonGrid()
 
         self.addButton("Segment Images")
         self.addButton("Generate Points")
         self.addButton("Remove Points")
         self.addButton("Add Points")
+        self.addButton("Show Bounding Boxes")
+        self.addButton("Show Pointlabels")
+        self.layout().addWidget(self.buttonGrid)
+        self.addButton("Remove Bounding Boxes")
+        self.addButton("Compute Correspondences")
+
+    def disableEverythingExcept(self, button_key):
+        for key in self.button_dict.keys():
+            if button_key != key:
+                self.button_dict[key].setEnabled(False)
+
+    def enableEverything(self):
+        for button in self.button_dict.values():
+            button.setEnabled(True)
 
     def addButton(self, label):
         button = QPushButton(label)
-        self.base_layout.addWidget(button)
+        self.layout().addWidget(button)
         self.button_dict[label] = button
 
 
-class ButtonGrid(QWidget):
-    buttonSignal = pyqtSignal(int, int)
-
-    def __init__(self, grid_size, parent=None):
-        super(ButtonGrid, self).__init__()
-
-        self.setLayout(QGridLayout())
-        self.buttons = [ [None]*grid_size for i in range(grid_size)]
-
-        for i in range(grid_size):
-            for j in range(grid_size):
-                button = QPushButton("")
-                button.clicked.emit()
-                self.layout().addWidget(button)
-
-        
-
-
-class GridButton(QPushButton):
-    buttonSignal = pyqtSignal(int, int)
-
-    def __init__(self, x, y, parent=None):
-        super(GridButton, self).__init__()
+class IdentifiableRectItem(QRectF):
+    def __init__(self, pointa, pointb, x, y):
+        super(IdentifiableRectItem, self).__init__(pointa, pointb)
         self.x = x
         self.y = y
-        self.clicked.emit(x, y)
 
+    def isEquals(self, x, y):
+        return self.x == x and self.y == y
 
+    def isEqualsToQGraphicsRect(self, qGraphicsRect):
+        return self == qGraphicsRect.rect()
 
 if __name__ == '__main__':
 

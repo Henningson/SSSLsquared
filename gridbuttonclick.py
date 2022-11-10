@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
 class ButtonGrid(QWidget):
     buttonSignal = pyqtSignal(int, int)
 
-    def __init__(self, grid_size, parent=None):
+    def __init__(self, grid_size=18, parent=None):
         super(ButtonGrid, self).__init__()
 
         self.setLayout(QGridLayout())
@@ -31,7 +31,7 @@ class ButtonGrid(QWidget):
             for x in range(grid_size):
                 button = GridButton(x, y)
                 button.clickedSignal.connect(self.clicked_button)
-                self.layout().addWidget(button, x, y, 1, 1)
+                self.layout().addWidget(button, y, x, 1, 1)
 
     @QtCore.pyqtSlot(int, int)
     def clicked_button(self, x, y):
@@ -50,6 +50,7 @@ class GridButton(QPushButton):
         self.setStyleSheet("border: 1px solid #333333;")
 
     def on_clicked(self, bool):
+        self.setStyleSheet("background-color : #33DD33")
         self.clickedSignal.emit(self.x, self.y)
 
 
