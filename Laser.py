@@ -4,7 +4,7 @@ import math
 import json
 
 class Laser:
-    def __init__(self, path="", filetype=None):
+    def __init__(self, path="", filetype="MAT"):
         if filetype=="MAT":
             self.readFromMAT(path)
         
@@ -49,6 +49,7 @@ class Laser:
                 laserField.append(np.array([np.tan((x - (self._gridWidth/2.0)) * self._alpha), np.tan((y - (self._gridHeight/2.0)) * self._alpha), -1.0]))
 
         self._laserRays = np.matmul(-self._rotation_matrix, np.stack(laserField).T).T
+        self.normalize()
 
     def setRays(self, laserRays):
         self._laserRays = laserRays
@@ -59,6 +60,9 @@ class Laser:
 
     def setAlpha(self, alpha):
         self._alpha = alpha
+
+    def normalize(self):
+        self._laserRays /= np.linalg.norm(self._laserRays, axis=1, keepdims=True)
 
     def setRotationMatrix(self, rotMat):
         self._rotation_matrix = rotMat
