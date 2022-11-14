@@ -16,7 +16,7 @@ from functools import partial
 from PyQt5 import QtCore, QtSql
 from PyQt5.QtGui import QPixmap, QTransform, QImage
 from os.path import expanduser, dirname
-from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QMenu, QLabel, QFileDialog, QHBoxLayout, QGraphicsRectItem, QGridLayout
+from PyQt5.QtWidgets import QMainWindow, QApplication, QGraphicsScene, QGraphicsView, QMenu, QLabel, QFileDialog, QFormLayout, QHBoxLayout, QGraphicsRectItem, QGridLayout
 import skvideo.io
 import sys
 from PyQt5 import QtCore, QtWidgets
@@ -31,6 +31,9 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import Visualizer
+
+from Camera import Camera
+from Laser import Laser
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -93,7 +96,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(function)
         return action
 
-    def __init__(self, video_path):
+    def __init__(self, video_path, calibration_path):
         QMainWindow.__init__(self)
         self.setMinimumSize(QSize(800, 600))            
 
@@ -151,7 +154,7 @@ class MainWindow(QMainWindow):
         self.menu_widget.button_dict["Remove Bounding Boxes"].clicked.connect(self.toggleRemoveBoundingBoxMode)
         self.menu_widget.button_dict["Show Bounding Boxes"].clicked.connect(self.toggleShowBoundingBoxes)
         self.menu_widget.button_dict["Show Pointlabels"].clicked.connect(self.toggleShowLabels)
-
+        self.menu_widget.button_dict["Show Epipolar Lines"].clicked.connect(self.toggleShowEpipolarLines)
 
         self.points2d = []
         self.labels = []
@@ -167,16 +170,25 @@ class MainWindow(QMainWindow):
 
         self.showBoundingBoxes = True
         self.showLabels = True
+        self.showEpipolarLines = False
 
         self.boundingBoxTuple = [None, None]
         self.boundingBoxes = []
         self.boundingBoxIndex = 0
         self.currentButton = [0, 0]
 
+        self.epipolarLines = None
+
         self.polygonhandle = None
+
+        self.camera = Camera(calibration_path)
+        self.laser = Laser(calibration_path)
 
         self.pointArray = np.zeros([self.video.shape[0], 18, 18, 2], dtype=np.float32)
         self.pointArray[:] = np.nan
+
+    def generateEpipolarLines(self):
+        a = 1
 
     def toggleRemoveBoundingBoxMode(self):
         self.removeBoundingBoxMode = not self.removeBoundingBoxMode
@@ -205,8 +217,9 @@ class MainWindow(QMainWindow):
                         self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 1]
                         self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 0]
                         self.labels[-1].append([boundingbox.x, boundingbox.y])
-        
-        #np.save("labeledpoints.np", )
+    
+    def toggleShowEpipolarLines(self):
+        self.showEpipolarLines = not self.showEpipolarLines
 
     def toggleShowLabels(self):
         self.showLabels = not self.showLabels
@@ -275,7 +288,6 @@ class MainWindow(QMainWindow):
         if len(self.segmentationPoints) > 0:
             self.drawSegmentation()
 
-
     @QtCore.pyqtSlot(QPointF)
     def removePoint(self, clicked_point):
         points = self.points2d[self.current_img_index]
@@ -299,7 +311,6 @@ class MainWindow(QMainWindow):
         point = np.array([clicked_point.y(), clicked_point.x()])
         self.points2d[self.current_img_index] = np.concatenate([self.points2d[self.current_img_index], point.reshape(-1, 2)])
         self.redraw()
-        #self.scene.addEllipse(point[1] - self.pointsize//2, point[0] - self.pointsize//2, self.pointsize, self.pointsize, QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
 
     def toggleSegmentation(self):
         self.segmentation_mode = not self.segmentation_mode
@@ -334,6 +345,10 @@ class MainWindow(QMainWindow):
                 text.setDefaultTextColor(QColor(255, 128, 128, 255))
         except:
             return
+
+    def drawEpipolarLines(self):
+        for pointA, pointB in self.epipolarLines:
+            self.scene.addLine(pointA[0], pointB[0], pointA[1], pointB[1], QPen(QColor(255, 255, 255, 255)))
 
     def generateCVSegmentation(self):
         base = np.zeros((self.video[0].shape[0], self.video[0].shape[1]), dtype=np.uint8)
@@ -375,7 +390,6 @@ class MainWindow(QMainWindow):
 
         for point in self.points2d[self.current_img_index].tolist():
             self.scene.addEllipse(point[1] - self.pointsize//2, point[0] - self.pointsize//2, self.pointsize, self.pointsize, QPen(QColor(128, 128, 255, 128)), QBrush(QColor(128, 128, 255, 128)))
-
 
     def closeEvent(self, event):
         self.winState()
@@ -505,12 +519,16 @@ class LeftMenuWidget(QWidget):
         self.setLayout(QVBoxLayout())
         self.layout().setAlignment(Qt.AlignTop)
         self.button_dict = {}
+        self.edit_dict = {}
         self.buttonGrid = ButtonGrid()
 
         self.addButton("Segment Images")
         self.addButton("Generate Points")
         self.addButton("Remove Points")
         self.addButton("Add Points")
+        self.addLineEdit("Min Distance", 80.0)
+        self.addLineEdit("Max Distance", 100.0)
+        self.addButton("Show Epipolar Lines")
         self.addButton("Show Bounding Boxes")
         self.addButton("Show Pointlabels")
         self.layout().addWidget(self.buttonGrid)
@@ -525,6 +543,13 @@ class LeftMenuWidget(QWidget):
     def enableEverything(self):
         for button in self.button_dict.values():
             button.setEnabled(True)
+
+    def addLineEdit(self, label, defaultvalue):
+        widget = QWidget()
+        widget.setLayout(QFormLayout())
+        lineedit = QLineEdit(str(defaultvalue), widget)
+        widget.layout().addRow(QLabel(label, widget), lineedit)
+        self.edit_dict[label] = lineedit
 
     def addButton(self, label):
         button = QPushButton(label)
@@ -544,9 +569,11 @@ class IdentifiableRectItem(QRectF):
     def isEqualsToQGraphicsRect(self, qGraphicsRect):
         return self == qGraphicsRect.rect()
 
+
+
 if __name__ == '__main__':
 
     app = QApplication(sys.argv)
-    shufti = MainWindow("data/Human_P181133_top_Broc5_4001-4200.avi")
+    shufti = MainWindow("data/Human_P181133_top_Broc5_4001-4200.avi", "")
     shufti.show()
     sys.exit(app.exec_())
