@@ -215,3 +215,16 @@ def get_basis(x, y):
         for j in range(3 - i):
             basis.append(x**j * y**i)
     return basis
+
+
+
+
+def pointLineSegmentDistance(linePointA, linePointB, point):
+    l2 = np.sum((linePointB - linePointA) ** 2)
+
+    if l2 == 0.0:
+        return np.linalg.norm(point - linePointA)
+
+    t = max(0, min(1, np.dot(point - linePointA, linePointB - linePointA) / l2))
+    projection = linePointA + t * (linePointB - linePointA)
+    return np.linalg.norm(point - projection)

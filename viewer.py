@@ -31,6 +31,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import Visualizer
+import utils
 
 from Camera import Camera
 from Laser import Laser
@@ -202,6 +203,17 @@ class MainWindow(QMainWindow):
         self.showBoundingBoxes = not self.showBoundingBoxes
         self.redraw()
 
+    def computeCorrespondencesFromEpipolars(self, threshold=3.0):
+        for perFramePoints in self.points2d:
+            self.labels.append([])
+            for line_index, line in enumerate(self.epipolarLines):
+                for i in range(perFramePoints.shape[0]):
+                    if utils.pointLineSegmentDistance(line[0], line[0], perFramePoints[i]) < threshold:
+                        x, y = self.laser.getXYfromN(line_index)
+                        self.pointArray[i, x, y, 1] = perFramePoints[i, 1]
+                        self.pointArray[i, x, y, 0] = perFramePoints[i, 1]
+                        self.labels[-1].append([x, y])
+
     def computeCorrespondences(self):
 
         # Go through every frame
@@ -214,7 +226,7 @@ class MainWindow(QMainWindow):
                 for i in range(perFramePoints.shape[0]):
                     # Check if the bounding box contains the point (point is ordered in opencv Y, X fashion)
                     if boundingbox.contains(perFramePoints[i, 1], perFramePoints[i, 0]):
-                        self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 1]
+                        self.pointArray[i, boundingbox.x, boundingbox.y, 1] = perFramePoints[i, 1]
                         self.pointArray[i, boundingbox.x, boundingbox.y, 0] = perFramePoints[i, 0]
                         self.labels[-1].append([boundingbox.x, boundingbox.y])
     
