@@ -21,7 +21,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 import wandb
 
-
 def main():
     config = load_config("config.yml")
     wandb.init(project="SSSLSquared", config=config)
@@ -69,13 +68,13 @@ def main():
     train_ds = JonathanDataset(base_path=config['dataset_path'], transform=train_transform, is_train=True)
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_ds = JonathanDataset(base_path=config['dataset_path'], transform=val_transforms, is_train=False)
-    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
 
     wandb.watch(model)
     for epoch in range(config['num_epochs']):
-        evaluate(val_loader, model, CELoss)
-        visualize(val_loader, model)
-        train(train_loader, CELoss, model, optimizer)
+        evaluate(val_loader, model, CELoss, epoch)
+        visualize(val_loader, model, epoch)
+        train(train_loader, CELoss, model, optimizer, epoch)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, "checkpoints/" + run_name + "/model.pth.tar")
@@ -85,8 +84,9 @@ def main():
 
 def load_config(path):
     return yaml.safe_load(Path(path).read_text())
+    
 
-def train(train_loader, loss_func, model, optim, log_interval=20):
+def train(train_loader, loss_func, model, optim, epoch, log_interval=20):
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
@@ -106,10 +106,10 @@ def train(train_loader, loss_func, model, optim, log_interval=20):
         running_average += loss.item()
         loop.set_postfix(loss=loss.item())
 
-    wandb.log({"Loss": running_average / len(train_loader)})
+    wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
 
 
-def visualize(val_loader, model):
+def visualize(val_loader, model, epoch):
     model.eval()
     for images, gt_seg in val_loader:
         images = images.to(device=DEVICE)
@@ -119,7 +119,7 @@ def visualize(val_loader, model):
 
         for i in range(images.shape[0]):
             wandb.log(
-            {"Pred" : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
+            {"Mask Prediction {0}".format(i) : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
                 "predictions" : {
                     "mask_data" : pred_seg[i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
@@ -128,12 +128,11 @@ def visualize(val_loader, model):
                     "mask_data" : gt_seg[i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
                 }
-            })})
+            })}, step=epoch)
         return
 
 
-
-def evaluate(val_loader, model, loss_func):
+def evaluate(val_loader, model, loss_func, epoch):
     Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
     DICE = torchmetrics.Dice(num_classes=4)
     running_average = 0.0
@@ -156,9 +155,9 @@ def evaluate(val_loader, model, loss_func):
     total_acc = Accuracy.compute()
     total_dice = DICE.compute()
 
-    wandb.log({"Eval Loss": running_average / len(val_loader)})
-    wandb.log({"Eval Accuracy": total_acc})
-    wandb.log({"Eval DICE": total_dice})
+    wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
+    wandb.log({"Eval Accuracy": total_acc}, step=epoch)
+    wandb.log({"Eval DICE": total_dice}, step=epoch)
 
 if __name__ == "__main__":
     main()
