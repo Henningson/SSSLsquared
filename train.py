@@ -5,39 +5,30 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEDataset
+from dataset import HLEDataset, JonathanDataset
 from torch.utils.data import DataLoader
 from model import SPLSS, LSQLocalization
-from utils import (
-    class_to_color,
-    load_checkpoint,
-    save_checkpoint,
-    check_accuracy,
-    save_predictions_as_imgs,
-    draw_points,
-    draw_heatmap
-)
+import LRscheduler
+import datetime
+import yaml
+from pathlib import Path
+import os
+import matplotlib.pyplot as plt
+import torchmetrics
 
-# Hyperparameters etc.
-LEARNING_RATE = 1e-5
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 8
-NUM_EPOCHS = 10
-NUM_WORKERS = 2
-NUM_SAMPLEPOINTS = 100
-LAMBDAS = [1.0, 1.0, 1.0]
-IMAGE_HEIGHT = 512  # 1280 originally
-IMAGE_WIDTH = 256  # 1918 originally
-PIN_MEMORY = True
-LOAD_MODEL = False
-DATASET_BASE_DIR = "../HLEDataset/dataset/"
-DATASET_TRAIN_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
-DATASET_VALIDATION_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
+
+import wandb
+
 
 def main():
+    config = load_config("config.yml")
+    wandb.init(project="SSSLSquared", config=config)
+
     train_transform = A.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.Resize(height=config['image_height'], width=config['image_width']),
             A.Rotate(limit=35, p=1.0),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.1),
@@ -48,12 +39,11 @@ def main():
             ),
             ToTensorV2(),
         ],
-        keypoint_params=A.KeypointParams(format='xy')
+        #keypoint_params=A.KeypointParams(format='xy')
     )
-
     val_transforms = A.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.Resize(height=config['image_height'], width=config['image_width']),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],
@@ -61,62 +51,114 @@ def main():
             ),
             ToTensorV2(),
         ],
-        keypoint_params=A.KeypointParams(format='xy')
+        #keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("my_checkpoint.pth.tar")).to(DEVICE)
-    CELoss = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 1.0, 1.0], dtype=torch.float32, device=DEVICE))
-    #CHMLoss = Losses.torch_loss_cHM()
-    #L2Loss = nn.MSELoss()
 
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    run_name = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+    os.mkdir("checkpoints/" + run_name)
 
-    train_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_TRAIN_KEYS, transform=train_transform, is_train=True, pad_to=NUM_SAMPLEPOINTS)
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=True)
-    val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
+    model = SPLSS(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
+    localizer = LSQLocalization(local_maxima_window=5)
 
-    scaler = torch.cuda.amp.GradScaler()
+    CELoss = nn.CrossEntropyLoss()
 
-    for epoch in range(NUM_EPOCHS):
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
+
+    train_ds = JonathanDataset(base_path=config['dataset_path'], transform=train_transform, is_train=True)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
+    val_ds = JonathanDataset(base_path=config['dataset_path'], transform=val_transforms, is_train=False)
+    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=False)
+
+    wandb.watch(model)
+    for epoch in range(config['num_epochs']):
+        evaluate(val_loader, model, CELoss)
+        visualize(val_loader, model)
+        train(train_loader, CELoss, model, optimizer)
+
+        checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
+        torch.save(checkpoint, "checkpoints/" + run_name + "/model.pth.tar")
+
+        with open("checkpoints/" + run_name + "/config.yml", 'w') as outfile:
+            yaml.dump(config, outfile, default_flow_style=False)
+
+def load_config(path):
+    return yaml.safe_load(Path(path).read_text())
+
+def train(train_loader, loss_func, model, optim, log_interval=20):
+    model.train()
+    running_average = 0.0
+    loop = tqdm(train_loader, desc="TRAINING")
+    for images, gt_seg in loop:
+        optim.zero_grad()
+
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        # forward
+        pred_seg = model(images)
+        loss = loss_func(pred_seg.float(), gt_seg.long())
         
-        #if epoch % 5 == 0:
-        #    with torch.no_grad():
-        #        val_image, gt_seg, gt_points = val_ds[0]
+        loss.backward()
+        optim.step()
 
-        #        pred_seg = model(val_image.unsqueeze(0).cuda())
-                #pred_seg = pred_seg.argmax(axis=1)
+        running_average += loss.item()
+        loop.set_postfix(loss=loss.item())
 
-                #pred_im = class_to_color(pred_seg, [torch.tensor([0, 0, 0], device=DEVICE), torch.tensor([0, 255, 0], device=DEVICE)])
-                #draw_points(val_image.detach().cpu().numpy(), gt_points.detach().cpu().numpy(), pred_points.detach().cpu().numpy())
-        #        loc = LSQLocalization(window_size=5)
-        #        loc.test(pred_seg)
-        #        draw_heatmap(pred_seg, axis=1)
-    
-        loop = tqdm(train_loader)
-        for images, gt_seg, gt_points in loop:
-            images = images.to(device=DEVICE)
-            gt_seg = gt_seg.to(device=DEVICE)
-            gt_points = gt_points.to(device=DEVICE)
-
-            # forward
-            with torch.cuda.amp.autocast():
-                segmentation = model(images)
-                loss_CE = CELoss(segmentation.float(), gt_seg.long())
-                loss = loss_CE*LAMBDAS[0]
-
-            optimizer.zero_grad()
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-
-            # update tqdm loop
-            loop.set_postfix(loss=loss.item())
-
-        checkpoint = {"optimizer": optimizer.state_dict(),} | model.get_statedict()
-        torch.save(checkpoint, "test_net.pth.tar")
+    wandb.log({"Loss": running_average / len(train_loader)})
 
 
+def visualize(val_loader, model):
+    model.eval()
+    for images, gt_seg in val_loader:
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
+
+        for i in range(images.shape[0]):
+            wandb.log(
+            {"Pred" : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
+                "predictions" : {
+                    "mask_data" : pred_seg[i].detach().cpu().numpy(),
+                    "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
+                },
+                "ground_truth" : {
+                    "mask_data" : gt_seg[i].detach().cpu().numpy(),
+                    "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
+                }
+            })})
+        return
+
+
+
+def evaluate(val_loader, model, loss_func):
+    Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
+    DICE = torchmetrics.Dice(num_classes=4)
+    running_average = 0.0
+
+    model.eval()
+    loop = tqdm(val_loader, desc="EVAL")
+    for images, gt_seg in loop:
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.long()
+
+        pred_seg = model(images)
+
+        acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
+        dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
+        loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
+        running_average += loss
+
+        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss})
+
+    total_acc = Accuracy.compute()
+    total_dice = DICE.compute()
+
+    wandb.log({"Eval Loss": running_average / len(val_loader)})
+    wandb.log({"Eval Accuracy": total_acc})
+    wandb.log({"Eval DICE": total_dice})
 
 if __name__ == "__main__":
     main()

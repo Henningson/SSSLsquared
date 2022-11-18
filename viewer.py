@@ -21,7 +21,7 @@ import skvideo.io
 import sys
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction, QGraphicsPolygonItem, QGraphicsEllipseItem
-from PyQt5.QtCore import QSize, pyqtSignal, QPointF, QRectF
+from PyQt5.QtCore import QSize, pyqtSignal, QPointF, QRectF, QLineF
 from PyQt5.QtGui import QIcon, QPen, QBrush, QPolygonF, QColor
 import torch
 from model import SPLSS, LSQLocalization
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(function)
         return action
 
-    def __init__(self, video_path, calibration_path):
+    def __init__(self, video_path, calibration_path, laser_path):
         QMainWindow.__init__(self)
         self.setMinimumSize(QSize(800, 600))            
 
@@ -169,9 +169,12 @@ class MainWindow(QMainWindow):
         self.view.pointSignal.connect(self.generateBoundingBox)
         self.view.pointSignal.connect(self.removeBoundingBox)
 
+        self.menu_widget.edit_dict["Min Distance"].editingFinished.connect(self.generateEpipolarLines)
+        self.menu_widget.edit_dict["Max Distance"].editingFinished.connect(self.generateEpipolarLines)
+
         self.showBoundingBoxes = True
         self.showLabels = True
-        self.showEpipolarLines = False
+        self.showEpipolarLines = True
 
         self.boundingBoxTuple = [None, None]
         self.boundingBoxes = []
@@ -183,13 +186,30 @@ class MainWindow(QMainWindow):
         self.polygonhandle = None
 
         self.camera = Camera(calibration_path)
-        self.laser = Laser(calibration_path)
+        self.laser = Laser(laser_path, "JSON")
 
         self.pointArray = np.zeros([self.video.shape[0], 18, 18, 2], dtype=np.float32)
         self.pointArray[:] = np.nan
 
+        self.generateEpipolarLines()
+        self.redraw()
+
+
     def generateEpipolarLines(self):
-        a = 1
+        self.epipolarLines = []
+
+        minDistance = self.menu_widget.getValueFromEdit("Min Distance")
+        maxDistance = self.menu_widget.getValueFromEdit("Max Distance")
+        minPoints = self.generatePointsAt(minDistance)
+        maxPoints = self.generatePointsAt(maxDistance)
+
+        for pointA, pointB in zip(minPoints.tolist(), maxPoints.tolist()):
+            self.epipolarLines.append(QLineF(pointA[0], pointA[1], pointB[0], pointB[1]))
+
+        self.redraw()
+
+    def generatePointsAt(self, distance):
+        return self.camera.project(self.laser.origin().reshape(-1, 3) + self.laser.rays() * distance)
 
     def toggleRemoveBoundingBoxMode(self):
         self.removeBoundingBoxMode = not self.removeBoundingBoxMode
@@ -204,6 +224,8 @@ class MainWindow(QMainWindow):
         self.redraw()
 
     def computeCorrespondencesFromEpipolars(self, threshold=3.0):
+        self.labels = []
+
         for perFramePoints in self.points2d:
             self.labels.append([])
             for line_index, line in enumerate(self.epipolarLines):
@@ -232,6 +254,7 @@ class MainWindow(QMainWindow):
     
     def toggleShowEpipolarLines(self):
         self.showEpipolarLines = not self.showEpipolarLines
+        self.redraw()
 
     def toggleShowLabels(self):
         self.showLabels = not self.showLabels
@@ -359,8 +382,8 @@ class MainWindow(QMainWindow):
             return
 
     def drawEpipolarLines(self):
-        for pointA, pointB in self.epipolarLines:
-            self.scene.addLine(pointA[0], pointB[0], pointA[1], pointB[1], QPen(QColor(255, 255, 255, 255)))
+        for line in self.epipolarLines:
+            self.scene.addLine(line, QPen(QColor(255, 255, 255, 255)))
 
     def generateCVSegmentation(self):
         base = np.zeros((self.video[0].shape[0], self.video[0].shape[1]), dtype=np.uint8)
@@ -499,6 +522,9 @@ class MainWindow(QMainWindow):
         if self.showLabels:
             self.drawLabels()
 
+        if self.showEpipolarLines:
+            self.drawEpipolarLines()
+
     def redraw(self):
         self.scene.clear()
         self.img = QPixmap(cvImgToQT(self.video[self.current_img_index]))
@@ -510,6 +536,9 @@ class MainWindow(QMainWindow):
 
         if self.showLabels:
             self.drawLabels()
+
+        if self.showEpipolarLines:
+            self.drawEpipolarLines()
 
     def resetScroll(self):
         self.view.verticalScrollBar().setValue(0)
@@ -547,6 +576,9 @@ class LeftMenuWidget(QWidget):
         self.addButton("Remove Bounding Boxes")
         self.addButton("Compute Correspondences")
 
+    def getValueFromEdit(self, key):
+        return float(self.edit_dict[key].text())
+
     def disableEverythingExcept(self, button_key):
         for key in self.button_dict.keys():
             if button_key != key:
@@ -562,6 +594,7 @@ class LeftMenuWidget(QWidget):
         lineedit = QLineEdit(str(defaultvalue), widget)
         widget.layout().addRow(QLabel(label, widget), lineedit)
         self.edit_dict[label] = lineedit
+        self.layout().addWidget(widget)
 
     def addButton(self, label):
         button = QPushButton(label)
@@ -586,6 +619,6 @@ class IdentifiableRectItem(QRectF):
 if __name__ == '__main__':
 
     app = QApplication(sys.argv)
-    shufti = MainWindow("data/Human_P181133_top_Broc5_4001-4200.avi", "")
+    shufti = MainWindow("data/Human_P181133_top_Broc5_4001-4200.avi", "data/Calib_Hemi_P181133.mat", "data/laser_calibration.json")
     shufti.show()
     sys.exit(app.exec_())

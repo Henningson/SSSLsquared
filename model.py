@@ -123,7 +123,7 @@ class LocalizationModule(nn.Module):
         return torch.tensor_split(sigma, split_indices), torch.tensor_split(mu, split_indices), torch.tensor_split(amplitude, split_indices)
 
 class LSQLocalization:
-    def __init__(self, order=2, gauss_window=5, local_maxima_window=11, heatmapaxis=1, threshold=0.5):
+    def __init__(self, order=2, gauss_window=5, local_maxima_window=11, heatmapaxis=1, threshold=0.3):
         super(LSQLocalization, self).__init__()
         self.order = order
 
@@ -151,6 +151,8 @@ class LSQLocalization:
 
         # Generate thresholded image
         threshed_heat = (heat > self.threshold) * heat
+        threshed_heat = kornia.filters.gaussian_blur2d(threshed_heat, self.kernel.shape, [self.kernel.shape[0]/4, self.kernel.shape[0]/4])
+        
 
         # Use dilation filtering to generate local maxima and squeeze first dimension
         dilated_heat = kornia.morphology.dilation(threshed_heat, self.kernel)
@@ -245,7 +247,6 @@ class SPLSS(nn.Module):
 
 
 def test():
-    CHM_loss = Losses.torch_loss_cHM()
 
     x = torch.randn((4, 3, 512, 256))
     y = torch.randn((4, 2, 100))

@@ -21,7 +21,6 @@ from tqdm import tqdm
 import Visualizer
 from Camera import Camera
 from Laser import Laser
-from viewer import ZoomableView, cvImgToQT
 
 class ZoomableView(QGraphicsView):
 
