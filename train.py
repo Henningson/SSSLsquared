@@ -147,7 +147,7 @@ def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
 
 
 def visualize(val_loader, model, epoch, log_wandb = False):
-    if log_wandb:
+    if not log_wandb:
         return
 
     model.eval()
