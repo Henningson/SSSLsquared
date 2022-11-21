@@ -15,6 +15,7 @@ from pathlib import Path
 import os
 import matplotlib.pyplot as plt
 import torchmetrics
+import argparse
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -22,6 +23,11 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 import wandb
 
 def main():
+    parser = argparse.ArgumentParser(
+                    prog = 'Train a Deep Neural Network for Semantic Segmentation',
+                    description = 'What the program does',
+                    epilog = 'Text at the bottom of help')
+
     config = load_config("config.yml")
     wandb.init(project="SSSLSquared", config=config)
 
@@ -84,7 +90,7 @@ def main():
 
 def load_config(path):
     return yaml.safe_load(Path(path).read_text())
-    
+
 
 def train(train_loader, loss_func, model, optim, epoch, log_interval=20):
     model.train()
