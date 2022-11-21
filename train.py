@@ -106,9 +106,9 @@ def main():
         yaml.dump(config, outfile, default_flow_style=False)
 
     for epoch in range(config['num_epochs']):
-        evaluate(val_loader, model, CELoss, epoch)
-        visualize(val_loader, model, epoch)
-        train(train_loader, CELoss, model, optimizer, epoch)
+        evaluate(val_loader, model, CELoss, epoch, log_wandb=LOG_WANDB)
+        visualize(val_loader, model, epoch, log_wandb=LOG_WANDB)
+        train(train_loader, CELoss, model, optimizer, epoch, log_wandb=LOG_WANDB)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
