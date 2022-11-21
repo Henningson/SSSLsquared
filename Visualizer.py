@@ -2,11 +2,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 matplotlib.interactive(True)
 
 
 class Visualize2D:
-    def __init__(self, batched=True, x=4, y=1, ticks=False):
+    def __init__(self, batched=True, x=4, y=1, ticks=False, remove_border = False):
         self.x = x if batched else 1
         self.y = y if batched else 1
 
@@ -14,6 +15,15 @@ class Visualize2D:
 
         self.fig = plt.figure()
         self.plots = []
+
+        
+        if x==1 and y==1 and remove_border:
+            ax = plt.Axes(self.fig, [0., 0., 1., 1.])
+            ax.set_axis_off()
+            self.fig.add_axes(ax)
+            self.plots.append(ax)
+            plt.axis('off')
+            return
 
         for i in range(x*y):
             ax = self.fig.add_subplot(y, x, i + 1, projection='rectilinear')
@@ -62,5 +72,15 @@ class Visualize2D:
 
         return output
     
+    def get_as_numpy_arr(self):
+        for ax in self.plots:
+            ax.axis('tight')
+            
+        plt.subplots_adjust(0,0,1,1,0,0)
+        width, height = self.fig.get_size_inches() * self.fig.get_dpi()
+        canvas = FigureCanvas(self.fig)
+        canvas.draw()
+        return np.frombuffer(canvas.tostring_rgb(), dtype='uint8').reshape(int(height), int(width), 3)
+
     def show(self):
         self.fig.show()
