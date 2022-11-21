@@ -142,11 +142,12 @@ def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
         loop.set_postfix(loss=loss.item())
 
     if log_wandb:
+        print("Logging wandb")
         wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
 
 
 def visualize(val_loader, model, epoch, log_wandb = False):
-    if not log_wandb:
+    if log_wandb:
         return
 
     model.eval()
@@ -198,10 +199,10 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
         wandb.log({"Eval Accuracy": total_acc}, step=epoch)
         wandb.log({"Eval DICE": total_dice}, step=epoch)
-    else:
-        print("Eval Loss at Epoch {0}: {1}".format(epoch, running_average / len(val_loader)))
-        print("Eval Accuracy at Epoch {0}: {1}".format(epoch, total_acc))
-        print("Eval DICE at Epoch {0}: {1}".format(epoch, total_dice))
+
+    print("Eval Loss at Epoch {0}: {1}".format(epoch, running_average / len(val_loader)))
+    print("Eval Accuracy at Epoch {0}: {1}".format(epoch, total_acc))
+    print("Eval DICE at Epoch {0}: {1}".format(epoch, total_dice))
 
 def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False):
     model.eval()
