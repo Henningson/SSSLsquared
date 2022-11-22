@@ -1,9 +1,8 @@
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-matplotlib.interactive(True)
+plt.ioff()
 
 
 class Visualize2D:
