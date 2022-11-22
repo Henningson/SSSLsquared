@@ -207,12 +207,13 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
 
-        inference_time += starter.elapsed_time(ender)
+        curr_time = starter.elapsed_time(ender)
+        inference_time += curr_time
         num_images += images.shape[0]
         
         running_average += loss
 
-        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou})
+        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time})
 
     total_acc = Accuracy.compute()
     total_dice = DICE.compute()
