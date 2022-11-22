@@ -1,3 +1,5 @@
+model: 'UNet'
+
 learning_rate: 0.01
 batch_size: 2
 

@@ -68,7 +68,7 @@ class Encoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, in_channels, out_channels, state_dict=None, features=[64, 128, 256, 512], num_samplepoints=50, point_dims=2, device="cuda"):
+    def __init__(self, in_channels, out_channels, state_dict=None, features=[64, 128, 256, 512], device="cuda"):
         super(Model, self).__init__()
         self.bottleneck_size = features[-1]*2
 

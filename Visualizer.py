@@ -6,7 +6,13 @@ plt.ioff()
 
 
 class Visualize2D:
-    def __init__(self, batched=True, x=4, y=1, ticks=False, remove_border = False):
+    def __init__(self, batched=True, x=4, y=1, ticks=False, remove_border = False, do_not_open = False):
+        if do_not_open:
+            plt.ioff()
+        else:
+            plt.ion()
+
+
         self.x = x if batched else 1
         self.y = y if batched else 1
 

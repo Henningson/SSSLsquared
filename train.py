@@ -7,7 +7,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from dataset import HLEDataset, JonathanDataset
 from torch.utils.data import DataLoader
-from models.UNet import UNet
 import LRscheduler
 import datetime
 import yaml
@@ -20,6 +19,12 @@ import pygit2
 import Visualizer
 import numpy as np
 import cv2
+import time
+
+import sys
+sys.path.append("models/")
+
+
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -43,8 +48,8 @@ def main():
         [
             A.Resize(height=config['image_height'], width=config['image_width']),
             A.Affine(translate_percent = 0.1, p=0.25), #This leads to errors in combination with others
-            A.OpticalDistortion(border_mode = cv2.BORDER_CONSTANT, shift_limit=0.7, distort_limit = 0.7, p = 0.5), #also play with shift_limit = 0.05 or distort_limit = 0.05
-            A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5), #Border Mode Constant for not duplicating the plica vocalis
+            A.OpticalDistortion(border_mode = cv2.BORDER_CONSTANT, shift_limit=0.7, distort_limit = 0.7, p = 0.5),
+            A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5),
             A.HorizontalFlip(p=0.5), #0.5
             A.VerticalFlip(p=0.25), #0.1
             A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6],p=0.5),
@@ -70,7 +75,8 @@ def main():
         #keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = UNet(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
+    neuralNet = __import__(config["model"])
+    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
     loss = nn.CrossEntropyLoss()
 
     if LOG_WANDB:
@@ -82,7 +88,6 @@ def main():
             exit()
 
         wandb.init(project="SSSLSquared", config=config)
-        wandb.config["model_name"] = type(model).__name__
         wandb.config["loss"] = type(loss).__name__
         wandb.config["checkpoint_name"] = checkpoint_name
         wandb.config["train_transform"] = A.to_dict(train_transform)
@@ -178,6 +183,8 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
     Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
     DICE = torchmetrics.Dice(num_classes=4)
     running_average = 0.0
+    inference_time = 0
+    num_images = 0
 
     model.eval()
     loop = tqdm(val_loader, desc="EVAL")
@@ -185,11 +192,19 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.long()
 
+        torch.cuda.synchronize()
+        curr_time = time.time()
         pred_seg = model(images)
+        time_elapsed = time.time() - curr_time
+        torch.cuda.synchronize()
 
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
         dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
+
+        inference_time += time_elapsed
+        num_images += images.shape[0]
+        
         running_average += loss
 
         loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss})
@@ -201,10 +216,13 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
         wandb.log({"Eval Accuracy": total_acc}, step=epoch)
         wandb.log({"Eval DICE": total_dice}, step=epoch)
+        wandb.log({"Inference Time": inference_time}, step=epoch)
 
-    print("Eval Loss at Epoch {0}: {1}".format(epoch, running_average / len(val_loader)))
-    print("Eval Accuracy at Epoch {0}: {1}".format(epoch, total_acc))
-    print("Eval DICE at Epoch {0}: {1}".format(epoch, total_dice))
+    print("_____EPOCH {0}_____".format(epoch))
+    print("Eval Loss: {1}".format(epoch, running_average / len(val_loader)))
+    print("Eval Accuracy: {1}".format(epoch, total_acc))
+    print("Eval DICE {0}: {1}".format(epoch, total_dice))
+    print("Inference Speed: {:.3f}".format(inference_time))
 
 def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False):
     model.eval()
@@ -220,7 +238,7 @@ def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False
 
         pred_seg = model(images).softmax(dim=1).argmax(dim=1)
 
-        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True)
+        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True, do_not_open=True)
         visualizer.draw_images(images)
         visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
 
