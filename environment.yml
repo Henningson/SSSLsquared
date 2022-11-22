@@ -109,23 +109,28 @@ dependencies:
     - click==8.1.3
     - contourpy==1.0.5
     - cycler==0.11.0
+    - decorator==4.4.2
     - docker-pycreds==0.4.0
     - fonttools==4.37.4
     - gitdb==4.0.9
     - gitpython==3.1.29
     - imageio==2.22.1
+    - imageio-ffmpeg==0.4.7
     - joblib==1.2.0
     - kiwisolver==1.4.4
     - kornia==0.6.8
     - matplotlib==3.6.1
+    - moviepy==1.0.3
     - networkx==2.8.7
     - opencv-python-headless==4.6.0.66
     - pathlib2==2.3.7.post1
     - pathspec==0.5.5
     - pathtools==0.1.2
+    - proglog==0.1.10
     - promise==2.3
     - protobuf==4.21.9
     - psutil==5.9.4
+    - pygit2==1.11.1
     - pygments==2.2.0
     - pyparsing==3.0.9
     - pyqt5-sip==12.11.0
@@ -140,6 +145,7 @@ dependencies:
     - sentry-sdk==1.11.0
     - setproctitle==1.3.2
     - shortuuid==1.0.11
+    - sk-video==1.1.10
     - smmap==5.0.0
     - threadpoolctl==3.1.0
     - tifffile==2022.10.10
