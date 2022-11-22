@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from dataset import HLEDataset, ReinhardDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
+from models.UNet import SPLSS, LSQLocalization
 from utils import (
     class_to_color,
     load_checkpoint,

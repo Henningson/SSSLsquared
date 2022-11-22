@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from dataset import HLEDataset, JonathanDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
+from models.UNet import UNet
 import LRscheduler
 import datetime
 import yaml
@@ -70,6 +70,9 @@ def main():
         #keypoint_params=A.KeypointParams(format='xy')
     )
 
+    model = UNet(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
+    loss = nn.CrossEntropyLoss()
+
     if LOG_WANDB:
         repo = pygit2.Repository('.')
         num_uncommitted_files = repo.diff().stats.files_changed
@@ -79,12 +82,11 @@ def main():
             exit()
 
         wandb.init(project="SSSLSquared", config=config)
+        wandb.config["model_name"] = type(model).__name__
+        wandb.config["loss"] = type(loss).__name__
         wandb.config["checkpoint_name"] = checkpoint_name
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
-
-    model = SPLSS(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
-    CELoss = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
@@ -106,9 +108,9 @@ def main():
         yaml.dump(config, outfile, default_flow_style=False)
 
     for epoch in range(config['num_epochs']):
-        evaluate(val_loader, model, CELoss, epoch, log_wandb=LOG_WANDB)
+        evaluate(val_loader, model, loss, epoch, log_wandb=LOG_WANDB)
         visualize(val_loader, model, epoch, log_wandb=LOG_WANDB)
-        train(train_loader, CELoss, model, optimizer, epoch, log_wandb=LOG_WANDB)
+        train(train_loader, loss, model, optimizer, epoch, log_wandb=LOG_WANDB)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
@@ -223,7 +225,8 @@ def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False
         visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
 
         frame = visualizer.get_as_numpy_arr()
-        
+        visualizer.close()
+
         # CHANNELS x WIDTH x HEIGHT!!!
         frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
         video_list.append(frame)
@@ -232,7 +235,7 @@ def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False
     video = np.stack(video_list, axis=0)
 
     if log_wandb:
-        wandb.log({"video": wandb.Video(video, fps=4)})
+        wandb.log({"video": wandb.Video(video.reshape(video.shape[0], video.shape[1], video.shape[3], video.shape[2]), fps=4)})
 
     out = cv2.VideoWriter(path + "val_video.mp4",cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
     for frame in video_list:

@@ -84,3 +84,6 @@ class Visualize2D:
 
     def show(self):
         self.fig.show()
+
+    def close(self):
+        plt.close()

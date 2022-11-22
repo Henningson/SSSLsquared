@@ -162,59 +162,6 @@ def draw_per_batch(im, points, color=(255, 255, 255)):
 
 
 
-# Indices: Tensor of size Nx3, like [[batch, y, x], ..]
-# Batch: Image batch of size BATCH x X x Y
-# Returns: Tensor of Size N x 3 x 3
-def extractWindow(batch, indices, window_size=11):
-    # Clean Windows, such that no image boundaries are hit
-
-    batch_index = indices[:, 0]
-    y = indices[:, 1]
-    x = indices[:, 2]
-
-    y = windows_out_of_bounds(y, batch.shape[1], window_size//2)
-    x = windows_out_of_bounds(x, batch.shape[2], window_size//2)
-
-    y_windows = y.unsqueeze(1).unsqueeze(1).repeat(1, window_size, window_size)
-    x_windows = x.unsqueeze(1).unsqueeze(1).repeat(1, window_size, window_size)
-
-    sub = torch.linspace(-window_size//2 + 1, window_size//2, window_size)
-    x_sub, y_sub = torch.meshgrid(sub, sub, indexing="xy")
-
-    y_windows += y_sub.unsqueeze(0).long().to(DEVICE)
-    x_windows += x_sub.unsqueeze(0).long().to(DEVICE)
-
-    # Catching windows
-    windows = batch[
-        batch_index.unsqueeze(-1), 
-        y_windows.reshape(-1, window_size*window_size), 
-        x_windows.reshape(-1, window_size*window_size)]
-
-    return windows.reshape(-1, window_size, window_size), y_windows, x_windows
-
-# Indices [n] Tensor
-# Image size integer
-# pad is window_size//2
-def windows_out_of_bounds(indices, image_size, pad):
-    # Move big ol indices
-    indices = torch.where(indices + pad >= image_size, 
-                    indices + ((image_size - pad) - indices) - 1, 
-                    indices)
-
-    indices = torch.where(indices - pad < 0,
-                    indices + (pad - indices),
-                    indices)
-    
-    return indices
-
-
-def get_basis(x, y):
-    """Return the fit basis polynomials: 1, x, x^2, ..., xy, x^2y, ... etc."""
-    basis = []
-    for i in range(3):
-        for j in range(3 - i):
-            basis.append(x**j * y**i)
-    return basis
 
 
 

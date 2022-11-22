@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import QMainWindow, QWidget, QPushButton, QAction, QGraphic
 from PyQt5.QtCore import QSize, pyqtSignal, QPointF, QRectF, QLineF
 from PyQt5.QtGui import QIcon, QPen, QBrush, QPolygonF, QColor
 import torch
-from model import SPLSS, LSQLocalization
+from models.UNet import SPLSS, LSQLocalization
 import numpy as np
 import cv2
 import albumentations as A

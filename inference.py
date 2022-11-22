@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import time
 from dataset import HLEDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
+from models.UNet import SPLSS, LSQLocalization
 import Visualizer
 
 # Hyperparameters etc.
