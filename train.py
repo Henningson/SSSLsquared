@@ -194,9 +194,11 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         gt_seg = gt_seg.long()
 
         torch.cuda.synchronize()
-        curr_time = time.time()
+        starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+        starter.record()
         pred_seg = model(images)
-        time_elapsed = time.time() - curr_time
+        ender.record()
+        
         torch.cuda.synchronize()
 
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
@@ -204,7 +206,7 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
 
-        inference_time += time_elapsed
+        inference_time += starter.elapsed_time(ender)/1000
         num_images += images.shape[0]
         
         running_average += loss
@@ -220,14 +222,14 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         wandb.log({"Eval Accuracy": total_acc}, step=epoch)
         wandb.log({"Eval DICE": total_dice}, step=epoch)
         wandb.log({"Eval IOU": total_IOU}, step=epoch)
-        wandb.log({"Inference Time": inference_time}, step=epoch)
+        wandb.log({"Inference Time": inference_time / num_images}, step=epoch)
 
     print("_____EPOCH {0}_____".format(epoch))
     print("Eval Loss: {1}".format(epoch, running_average / len(val_loader)))
     print("Eval Accuracy: {1}".format(epoch, total_acc))
     print("Eval IOU: {1}".format(epoch, total_IOU))
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
-    print("Inference Speed: {:.3f}".format(inference_time))
+    print("Inference Speed: {:.3f}".format(inference_time / num_images))
 
 def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False):
     model.eval()
