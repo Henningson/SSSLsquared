@@ -238,15 +238,12 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
     print("Inference Speed (ms): {:.3f}".format(inference_time / num_images))
 
-def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False):
+def generate_video(model, data_loader, path, log_wandb = False):
     model.eval()
     count = 0
     video_list = []
     
     for images, gt_seg in data_loader:
-        if count > num_frames:
-            break
-
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
