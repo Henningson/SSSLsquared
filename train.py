@@ -20,6 +20,7 @@ import Visualizer
 import numpy as np
 import cv2
 import time
+import Losses
 
 import sys
 sys.path.append("models/")
@@ -77,7 +78,7 @@ def main():
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
-    loss = nn.CrossEntropyLoss()
+    loss = Losses.PolyLoss(softmax=True)
 
     if LOG_WANDB:
         repo = pygit2.Repository('.')
