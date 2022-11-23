@@ -120,7 +120,7 @@ def main():
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
     
-    generate_video(model, vid_loader, "checkpoints/" + checkpoint_name + "/", log_wandb=LOG_WANDB)
+    generate_video(model, vid_loader, "checkpoints/" + checkpoint_name + "/", log_wandb=False)
     print("\033[92m" + "Training Done!")
 
 
