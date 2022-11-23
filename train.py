@@ -97,10 +97,13 @@ def main():
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
 
     train_ds = JonathanDataset(base_path=config['dataset_path'], transform=train_transform, is_train=True)
-    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_ds = JonathanDataset(base_path=config['dataset_path'], transform=val_transforms, is_train=False)
+
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
-    vid_loader = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
+
+    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
+    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
 
     if LOG_WANDB:
         wandb.watch(model)
@@ -120,7 +123,8 @@ def main():
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
     
-    generate_video(model, vid_loader, "checkpoints/" + checkpoint_name + "/", log_wandb=False)
+    generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
+    generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
     print("\033[92m" + "Training Done!")
 
 
@@ -264,7 +268,7 @@ def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False
     if log_wandb:
         wandb.log({"video": wandb.Video(video.reshape(video.shape[0], video.shape[1], video.shape[3], video.shape[2]), fps=4)})
 
-    out = cv2.VideoWriter(path + "val_video.mp4",cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
     for frame in video_list:
         out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
     out.release()
