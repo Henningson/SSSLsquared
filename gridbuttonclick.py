@@ -90,6 +90,13 @@ class MainWindow(QMainWindow):
         for line in self.lines:
             self.scene.addLine(line, QPen(QColor(0, 0, 0, 255)))
 
+    def calculateCorrespondences(self):
+        pass
+        # for frame in frames:
+        #   for lineIndex, line in enumerate(epipolarLines):
+        #       for point in pointsOfFrame:
+        #           
+
     @QtCore.pyqtSlot(int, int)
     def getGridButtonClicked(self, x, y):
         print("Clicked button {} {}".format(x, y))
