@@ -3,6 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+*.pth.tar
+wandb/*
+.vscode/*
+checkpoints/*
+*.png
+*.mp4
+*.avi
+*.yml
+*.mat
+*.json
+*.zip
+*.dat
+test.py
+
 # C extensions
 *.so
 

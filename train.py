@@ -5,42 +5,55 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEDataset
+from dataset import HLEDataset, JonathanDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
-from utils import (
-    class_to_color,
-    load_checkpoint,
-    save_checkpoint,
-    check_accuracy,
-    save_predictions_as_imgs,
-    draw_points,
-    draw_heatmap
-)
+import LRscheduler
+import datetime
+import yaml
+from pathlib import Path
+import os
+import matplotlib.pyplot as plt
+import torchmetrics
+import argparse
+import pygit2
+import Visualizer
+import numpy as np
+import cv2
+import time
+import Losses
 
-# Hyperparameters etc.
-LEARNING_RATE = 1e-5
+import sys
+sys.path.append("models/")
+
+
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-BATCH_SIZE = 8
-NUM_EPOCHS = 10
-NUM_WORKERS = 2
-NUM_SAMPLEPOINTS = 100
-LAMBDAS = [1.0, 1.0, 1.0]
-IMAGE_HEIGHT = 512  # 1280 originally
-IMAGE_WIDTH = 256  # 1918 originally
-PIN_MEMORY = True
-LOAD_MODEL = False
-DATASET_BASE_DIR = "../HLEDataset/dataset/"
-DATASET_TRAIN_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
-DATASET_VALIDATION_KEYS = ["CF", "DD", "FH", "LS", "MK", "MS", "RH", "SS", "TM", "CM"]
+
+import wandb
 
 def main():
+    parser = argparse.ArgumentParser(
+                    prog = 'Train a Deep Neural Network for Semantic Segmentation',
+                    description = 'What the program does',
+                    epilog = 'Text at the bottom of help')
+    parser.add_argument("-l", "--logwandb", action="store_true")
+    
+    args = parser.parse_args()
+    LOG_WANDB = args.logwandb
+
+    config = load_config("config.yml")
+    checkpoint_name = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+    os.mkdir("checkpoints/" + checkpoint_name)
+
     train_transform = A.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
-            A.Rotate(limit=35, p=1.0),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.1),
+            A.Resize(height=config['image_height'], width=config['image_width']),
+            A.Affine(translate_percent = 0.1, p=0.25), #This leads to errors in combination with others
+            A.OpticalDistortion(border_mode = cv2.BORDER_CONSTANT, shift_limit=0.7, distort_limit = 0.7, p = 0.5),
+            A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5),
+            A.HorizontalFlip(p=0.5), #0.5
+            A.VerticalFlip(p=0.25), #0.1
+            A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6],p=0.5),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],
@@ -48,12 +61,11 @@ def main():
             ),
             ToTensorV2(),
         ],
-        keypoint_params=A.KeypointParams(format='xy')
+        #keypoint_params=A.KeypointParams(format='xy')
     )
-
     val_transforms = A.Compose(
         [
-            A.Resize(height=IMAGE_HEIGHT, width=IMAGE_WIDTH),
+            A.Resize(height=config['image_height'], width=config['image_width']),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],
@@ -61,62 +73,206 @@ def main():
             ),
             ToTensorV2(),
         ],
-        keypoint_params=A.KeypointParams(format='xy')
+        #keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("my_checkpoint.pth.tar")).to(DEVICE)
-    CELoss = nn.CrossEntropyLoss(weight=torch.tensor([0.1, 1.0, 1.0], dtype=torch.float32, device=DEVICE))
-    #CHMLoss = Losses.torch_loss_cHM()
-    #L2Loss = nn.MSELoss()
+    neuralNet = __import__(config["model"])
+    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
+    loss = Losses.PolyLoss(softmax=True)
 
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    if LOG_WANDB:
+        repo = pygit2.Repository('.')
+        num_uncommitted_files = repo.diff().stats.files_changed
 
-    train_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_TRAIN_KEYS, transform=train_transform, is_train=True, pad_to=NUM_SAMPLEPOINTS)
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=True)
-    val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
+        if num_uncommitted_files > 0:
+            print("\033[93m" + "Uncommited changes! Please commit before training.")
+            exit()
 
-    scaler = torch.cuda.amp.GradScaler()
+        wandb.init(project="SSSLSquared", config=config)
+        wandb.config["loss"] = type(loss).__name__
+        wandb.config["checkpoint_name"] = checkpoint_name
+        wandb.config["train_transform"] = A.to_dict(train_transform)
+        wandb.config["validation_transform"] = A.to_dict(val_transforms)
 
-    for epoch in range(NUM_EPOCHS):
-        
-        #if epoch % 5 == 0:
-        #    with torch.no_grad():
-        #        val_image, gt_seg, gt_points = val_ds[0]
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
+    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
 
-        #        pred_seg = model(val_image.unsqueeze(0).cuda())
-                #pred_seg = pred_seg.argmax(axis=1)
+    train_ds = JonathanDataset(base_path=config['dataset_path'], transform=train_transform, is_train=True)
+    val_ds = JonathanDataset(base_path=config['dataset_path'], transform=val_transforms, is_train=False)
 
-                #pred_im = class_to_color(pred_seg, [torch.tensor([0, 0, 0], device=DEVICE), torch.tensor([0, 255, 0], device=DEVICE)])
-                #draw_points(val_image.detach().cpu().numpy(), gt_points.detach().cpu().numpy(), pred_points.detach().cpu().numpy())
-        #        loc = LSQLocalization(window_size=5)
-        #        loc.test(pred_seg)
-        #        draw_heatmap(pred_seg, axis=1)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
+
+    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
+    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
+
+    if LOG_WANDB:
+        wandb.watch(model)
     
-        loop = tqdm(train_loader)
-        for images, gt_seg, gt_points in loop:
-            images = images.to(device=DEVICE)
-            gt_seg = gt_seg.to(device=DEVICE)
-            gt_points = gt_points.to(device=DEVICE)
+    # Save config stuff
+    A.save(train_transform, "checkpoints/" + checkpoint_name + "/train_transform.yaml", data_format="yaml")
+    A.save(val_transforms, "checkpoints/" + checkpoint_name + "/val_transform.yaml", data_format="yaml")
 
-            # forward
-            with torch.cuda.amp.autocast():
-                segmentation = model(images)
-                loss_CE = CELoss(segmentation.float(), gt_seg.long())
-                loss = loss_CE*LAMBDAS[0]
+    with open("checkpoints/" + checkpoint_name + "/config.yml", 'w') as outfile:
+        yaml.dump(config, outfile, default_flow_style=False)
 
-            optimizer.zero_grad()
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+    for epoch in range(config['num_epochs']):
+        evaluate(val_loader, model, loss, epoch, log_wandb=LOG_WANDB)
+        visualize(val_loader, model, epoch, log_wandb=LOG_WANDB)
+        train(train_loader, loss, model, optimizer, epoch, log_wandb=LOG_WANDB)
 
-            # update tqdm loop
-            loop.set_postfix(loss=loss.item())
-
-        checkpoint = {"optimizer": optimizer.state_dict(),} | model.get_statedict()
-        torch.save(checkpoint, "test_net.pth.tar")
+        checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
+        torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
+    
+    generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
+    generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
+    print("\033[92m" + "Training Done!")
 
 
+def load_config(path):
+    return yaml.safe_load(Path(path).read_text())
+
+
+def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
+    model.train()
+    running_average = 0.0
+    loop = tqdm(train_loader, desc="TRAINING")
+    for images, gt_seg in loop:
+        optim.zero_grad()
+
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        # forward
+        pred_seg = model(images)
+        loss = loss_func(pred_seg.float(), gt_seg.long())
+        
+        loss.backward()
+        optim.step()
+
+        running_average += loss.item()
+        loop.set_postfix(loss=loss.item())
+
+    if log_wandb:
+        print("Logging wandb")
+        wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
+
+
+def visualize(val_loader, model, epoch, log_wandb = False):
+    if not log_wandb:
+        return
+
+    model.eval()
+    for images, gt_seg in val_loader:
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
+
+        for i in range(images.shape[0]):
+            wandb.log(
+            {"Mask Prediction {0}".format(i) : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
+                "predictions" : {
+                    "mask_data" : pred_seg[i].detach().cpu().numpy(),
+                    "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
+                },
+                "ground_truth" : {
+                    "mask_data" : gt_seg[i].detach().cpu().numpy(),
+                    "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
+                }
+            })}, step=epoch)
+        return
+
+
+def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
+    Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
+    DICE = torchmetrics.Dice(num_classes=4)
+    IOU = torchmetrics.JaccardIndex(num_classes=4)
+    running_average = 0.0
+    inference_time = 0
+    num_images = 0
+
+    model.eval()
+    loop = tqdm(val_loader, desc="EVAL")
+    for images, gt_seg in loop:
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.long()
+
+        torch.cuda.synchronize()
+
+        starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+        starter.record()
+        pred_seg = model(images)
+        ender.record()
+        
+        torch.cuda.synchronize()
+
+        acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
+        dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
+        iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
+        loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
+
+        curr_time = starter.elapsed_time(ender)
+        inference_time += curr_time
+        num_images += images.shape[0]
+        
+        running_average += loss
+
+        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time})
+
+    total_acc = Accuracy.compute()
+    total_dice = DICE.compute()
+    total_IOU = IOU.compute()
+    
+    if log_wandb:
+        wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
+        wandb.log({"Eval Accuracy": total_acc}, step=epoch)
+        wandb.log({"Eval DICE": total_dice}, step=epoch)
+        wandb.log({"Eval IOU": total_IOU}, step=epoch)
+        wandb.log({"Inference Time (ms)": inference_time / num_images}, step=epoch)
+
+    print("_____EPOCH {0}_____".format(epoch))
+    print("Eval Loss: {1}".format(epoch, running_average / len(val_loader)))
+    print("Eval Accuracy: {1}".format(epoch, total_acc))
+    print("Eval IOU: {1}".format(epoch, total_IOU))
+    print("Eval DICE {0}: {1}".format(epoch, total_dice))
+    print("Inference Speed (ms): {:.3f}".format(inference_time / num_images))
+
+def generate_video(model, data_loader, path, num_frames = 100, log_wandb = False):
+    model.eval()
+    count = 0
+    video_list = []
+    
+    for images, gt_seg in data_loader:
+        if count > num_frames:
+            break
+
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
+
+        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True, do_not_open=True)
+        visualizer.draw_images(images)
+        visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
+
+        frame = visualizer.get_as_numpy_arr()
+        visualizer.close()
+
+        # CHANNELS x WIDTH x HEIGHT!!!
+        frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
+        video_list.append(frame)
+        count += images.shape[0]
+
+    video = np.stack(video_list, axis=0)
+
+    if log_wandb:
+        wandb.log({"video": wandb.Video(video.reshape(video.shape[0], video.shape[1], video.shape[3], video.shape[2]), fps=4)})
+
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
+    for frame in video_list:
+        out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
+    out.release()
 
 if __name__ == "__main__":
     main()

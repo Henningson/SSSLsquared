@@ -1,0 +1,16 @@
+model: 'UNet'
+
+learning_rate: 0.01
+batch_size: 2
+
+last_epoch: -1
+num_epochs: 100
+num_classes: 4
+
+image_height: 512
+image_width: 256
+
+dataset_path: '../JonathanDataset/'
+
+gauss_window: 5
+maxima_window: 11

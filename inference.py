@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import time
 from dataset import HLEDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
+from models.UNet import SPLSS, LSQLocalization
 import Visualizer
 
 # Hyperparameters etc.
@@ -41,18 +41,18 @@ def main():
         keypoint_params=A.KeypointParams(format='xy')
     )
 
-    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("pretrained.pth.tar")).to(DEVICE)
+    model = SPLSS(in_channels=1, out_channels=3, state_dict=torch.load("assets/pretrained.pth.tar")).to(DEVICE)
     val_ds = HLEDataset(base_path=DATASET_BASE_DIR, keys=DATASET_VALIDATION_KEYS, transform=val_transforms, is_train=False, pad_to=NUM_SAMPLEPOINTS)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY, shuffle=False)
-    vis = Visualizer.Visualize2D(batched=True, x=4, y=1)
+    
 
-    loc = LSQLocalization(window_size=5)
+    loc = LSQLocalization(local_maxima_window=5)
     loop = tqdm(val_loader)
     for images, gt_seg, gt_points in loop:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
         gt_points = gt_points.to(device=DEVICE)
-
+        vis = Visualizer.Visualize2D(batched=True, x=4, y=1)
         #utils.draw_images(images, 1, 1)
 
         # forward
@@ -66,7 +66,7 @@ def main():
 
             #segmentation = segmentation.argmax(dim=1)
             vis.draw_images(images)
-            vis.draw_segmentation(segmentation.argmax(dim=1), 3, opacity=0.8)
+            vis.draw_segmentation(gt_seg, 3, opacity=0.8)
             #vis.draw_heatmap(segmentation, heatmapaxis=1)
             #vis.draw_images(images)
             #vis.draw_points(mean)

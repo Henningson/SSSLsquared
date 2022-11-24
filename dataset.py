@@ -65,9 +65,9 @@ class HLEDataset(Dataset):
             keypoints = augmentations["keypoints"]
 
         # Set class labels
-        x = np.zeros(glottal_mask.shape, dtype=np.float32)
-        x[mask == 1.0] = 1
-        x[glottal_mask == 1.0] = 2
+        seg = np.zeros(glottal_mask.shape, dtype=np.float32)
+        seg[mask == 1.0] = 1
+        seg[glottal_mask == 2.0] = 2
         
         # Pad keypoints, such that tensor have all the same size
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
@@ -75,7 +75,41 @@ class HLEDataset(Dataset):
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
 
 
-        return image, x, keypoints
+        return image, seg, keypoints
+
+
+class JonathanDataset(Dataset):
+    def __init__(self, base_path, transform=None, is_train=True):
+        self.train_image_dir = os.path.join(base_path, "train_images")
+        self.train_label_dir = os.path.join(base_path, "train_masks", "all_4")
+        self.test_image_dir = os.path.join(base_path, "val_images")
+        self.test_label_dir = os.path.join(base_path, "val_masks", "all_4")
+        self.transform = transform
+
+        self.is_train = is_train
+
+        self.images = self.make_list(self.train_image_dir) if self.is_train else self.make_list(self.test_image_dir)
+        self.masks = self.make_list(self.train_label_dir) if self.is_train else self.make_list(self.test_label_dir)
+
+    def make_list(self, directory):
+        return [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        mask_path = self.masks[index]
+
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
+        seg = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+
+        if self.transform is not None:
+            augmentations = self.transform(image=image, mask=seg)
+            image = augmentations["image"]
+            seg = augmentations["mask"]
+
+        return image, seg
 
 
 class VideoDataset(Dataset):

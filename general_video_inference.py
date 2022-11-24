@@ -4,7 +4,7 @@ from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 from video_dataset import VideoDataset
 from torch.utils.data import DataLoader
-from model import SPLSS, LSQLocalization
+from models.UNet import SPLSS, LSQLocalization
 import Visualizer
 import argparse
 
