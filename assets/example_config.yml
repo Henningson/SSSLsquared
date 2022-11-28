@@ -10,7 +10,12 @@ num_classes: 4
 image_height: 512
 image_width: 256
 
-dataset_path: '../JonathanDataset/'
+dataset_path: '../HLEDataset/dataset/'
+
+train_keys: CF,CM,DD,FH,LS,RH,SS,TM
+val_keys: MK,MS
 
 gauss_window: 5
 maxima_window: 11
+
+is_color: false
