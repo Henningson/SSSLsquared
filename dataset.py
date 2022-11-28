@@ -62,9 +62,9 @@ class HLEPlusPlus(Dataset):
 
         # Set class labels
         seg = np.zeros(glottal_mask.shape, dtype=np.float32)
-        seg[vocalfold_mask == 3.0] = 3
-        seg[mask == 1.0] = 1
-        seg[glottal_mask == 2.0] = 2
+        seg[vocalfold_mask == 3.0] = 2
+        seg[mask == 1.0] = 3
+        seg[glottal_mask == 2.0] = 1
 
         return image, seg
 
