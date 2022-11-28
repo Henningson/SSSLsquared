@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEDataset, JonathanDataset
+from dataset import HLEDataset, JonathanDataset, HLEPlusPlus
 from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
@@ -97,8 +97,8 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
 
-    train_ds = JonathanDataset(base_path=config['dataset_path'], transform=train_transform, is_train=True)
-    val_ds = JonathanDataset(base_path=config['dataset_path'], transform=val_transforms, is_train=False)
+    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), transform=train_transform)
+    val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), transform=val_transforms)
 
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
@@ -108,6 +108,7 @@ def main():
 
     if LOG_WANDB:
         wandb.watch(model)
+        wandb.config["dataset_name"] = type(train_ds).__name__
     
     # Save config stuff
     A.save(train_transform, "checkpoints/" + checkpoint_name + "/train_transform.yaml", data_format="yaml")

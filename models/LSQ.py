@@ -104,6 +104,8 @@ class LSQLocalization:
         self.x_sub = x_sub.unsqueeze(0).to(device)
         self.y_sub = y_sub.unsqueeze(0).to(device)
 
+        self.device = device
+
 
 
     def test(self, x, segmentation=None):
@@ -125,10 +127,10 @@ class LSQLocalization:
 
         # Find local maxima and indices at which we need to split the data
         maxima_indices = local_maxima.nonzero()
-        split_indices = get_split_indices(maxima_indices[:, 0]).tolist()
+        split_indices = get_split_indices(maxima_indices[:, 0], device=self.device).tolist()
 
         # Extract windows around the local maxima
-        intensities, y_windows, x_windows = extractWindow(heat[:, 0, :, :], maxima_indices, self.gauss_window_size)
+        intensities, y_windows, x_windows = extractWindow(heat[:, 0, :, :], maxima_indices, self.gauss_window_size, device=self.device)
 
         # Reformat [-2, -1, 0, ..] tensors for x-y-indexing
         reformat_x = self.x_sub.repeat(x_windows.size(0), 1, 1).reshape(-1, self.gauss_window_size**2)

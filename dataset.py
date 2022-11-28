@@ -7,6 +7,68 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 
+class HLEPlusPlus(Dataset):
+    def __init__(self, base_path, keys, transform=None):
+        self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
+        self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
+        self.glottal_mask_dirs = [os.path.join(base_path, key, "glottal_mask/") for key in keys]
+        self.laserpoints_dirs = [os.path.join(base_path, key, "points2d/") for key in keys]
+        self.vocalfold_mask_dirs = [os.path.join(base_path, key, "vf_mask/") for key in keys]
+        
+        self.transform = transform
+        self.train_test_split = 0.9
+
+        self.images = self.make_list(self.image_dirs)
+        self.laserpoint_masks = self.make_list(self.mask_dirs)
+        self.glottal_masks = self.make_list(self.glottal_mask_dirs)
+        self.vocalfold_masks = self.make_list(self.vocalfold_mask_dirs)
+
+    def make_list(self, dirs):
+        list = []
+        for dir in dirs:
+            file_list = sorted(os.listdir(dir))
+
+            for file_path in file_list:
+                list.append(dir + file_path)
+
+        return list
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        mask_path = self.laserpoint_masks[index]
+        glottal_mask_path = self.glottal_masks[index]
+        vocalfold_mask_path = self.vocalfold_masks[index]
+
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
+
+        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        mask[mask == 255.0] = 1.0
+
+        glottal_mask = np.array(Image.open(glottal_mask_path).convert("L"), dtype=np.float32)
+        glottal_mask[glottal_mask == 255.0] = 2.0
+
+        vocalfold_mask = np.array(Image.open(vocalfold_mask_path).convert("L"), dtype=np.float32)
+        vocalfold_mask[vocalfold_mask == 255.0] = 3.0
+
+        if self.transform is not None:
+            augmentations = self.transform(image=image, mask=mask, glottal_mask=glottal_mask, vocalfold_mask=vocalfold_mask)
+            image = augmentations["image"]
+            mask = augmentations["mask"]
+            glottal_mask = augmentations["glottal_mask"]
+            vocalfold_mask = augmentations["vocalfold_mask"]
+
+        # Set class labels
+        seg = np.zeros(glottal_mask.shape, dtype=np.float32)
+        seg[vocalfold_mask == 3.0] = 2
+        seg[mask == 1.0] = 3
+        seg[glottal_mask == 2.0] = 1
+
+        return image, seg
+
+
 class HLEDataset(Dataset):
     def __init__(self, base_path, keys, transform=None, is_train=True, train_test_split=0.9, pad_to=150):
         self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
