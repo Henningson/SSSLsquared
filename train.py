@@ -118,8 +118,14 @@ def main():
         yaml.dump(config, outfile, default_flow_style=False)
 
     for epoch in range(config['num_epochs']):
+        # Evaluate on Validation Set
         evaluate(val_loader, model, loss, epoch, log_wandb=LOG_WANDB)
-        visualize(val_loader, model, epoch, log_wandb=LOG_WANDB)
+
+        # Visualize Validation as well as Training Set examples
+        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
+        visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
+
+        # Train the network
         train(train_loader, loss, model, optimizer, epoch, log_wandb=LOG_WANDB)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
@@ -159,7 +165,7 @@ def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
         wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
 
 
-def visualize(val_loader, model, epoch, log_wandb = False):
+def visualize(val_loader, model, epoch, title="Validation Predictions", log_wandb = False):
     if not log_wandb:
         return
 
@@ -172,7 +178,7 @@ def visualize(val_loader, model, epoch, log_wandb = False):
 
         for i in range(images.shape[0]):
             wandb.log(
-            {"Mask Prediction {0}".format(i) : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
+            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
                 "predictions" : {
                     "mask_data" : pred_seg[i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
