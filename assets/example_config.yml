@@ -2,6 +2,7 @@ model: 'UNet'
 
 learning_rate: 0.01
 batch_size: 2
+features: [32, 64, 128, 256, 512, 1024]
 
 last_epoch: -1
 num_epochs: 100

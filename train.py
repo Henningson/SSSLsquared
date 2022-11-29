@@ -77,7 +77,7 @@ def main():
     )
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes']).to(DEVICE)
+    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], features=config['features']).to(DEVICE)
     loss = nn.CrossEntropyLoss()
 
     if LOG_WANDB:
