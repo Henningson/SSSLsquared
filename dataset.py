@@ -44,8 +44,8 @@ class HLEPlusPlus(Dataset):
 
         image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
 
-        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
+        laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        laserpoints[laserpoints == 255.0] = 1.0
 
         glottal_mask = np.array(Image.open(glottal_mask_path).convert("L"), dtype=np.float32)
         glottal_mask[glottal_mask == 255.0] = 2.0
@@ -53,18 +53,18 @@ class HLEPlusPlus(Dataset):
         vocalfold_mask = np.array(Image.open(vocalfold_mask_path).convert("L"), dtype=np.float32)
         vocalfold_mask[vocalfold_mask == 255.0] = 3.0
 
-        if self.transform is not None:
-            augmentations = self.transform(image=image, mask=mask, glottal_mask=glottal_mask, vocalfold_mask=vocalfold_mask)
-            image = augmentations["image"]
-            mask = augmentations["mask"]
-            glottal_mask = augmentations["glottal_mask"]
-            vocalfold_mask = augmentations["vocalfold_mask"]
-
         # Set class labels
         seg = np.zeros(glottal_mask.shape, dtype=np.float32)
         seg[vocalfold_mask == 3.0] = 2
-        seg[mask == 1.0] = 3
+        seg[laserpoints == 1.0] = 3
         seg[glottal_mask == 2.0] = 1
+
+        if self.transform is not None:
+            augmentations = self.transform(image=image, mask=seg)
+            image = augmentations["image"]
+            seg = augmentations["mask"]
+
+        testim = image*255
 
         return image, seg
 
