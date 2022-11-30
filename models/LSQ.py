@@ -106,11 +106,9 @@ class LSQLocalization:
 
         self.device = device
 
-    def test(self, x, segmentation=None):
+    def forward(self, x, segmentation=None):
         heat = x[:, self.heatmapaxis, :, :].clone()
         heat = heat.unsqueeze(1)
-
-
 
         # Generate thresholded image
         threshed_heat = (heat > self.threshold) * heat

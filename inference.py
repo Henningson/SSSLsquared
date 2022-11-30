@@ -54,7 +54,10 @@ def main():
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), transform=val_transforms)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=4, pin_memory=True, shuffle=False)
     
-    localizer = LSQLocalization(local_maxima_window = config["maxima_window"], gauss_window = config["gauss_window"], heatmapaxis=3, threshold=0.5)
+    localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
+                                gauss_window = config["gauss_window"], 
+                                heatmapaxis = config["heatmapaxis"], 
+                                threshold = config["threshold"])
 
     video = []
 
@@ -72,7 +75,7 @@ def main():
         prediction = model(images).softmax(dim=1)
         segmentation = prediction.argmax(dim=1)
 
-        sigma, means, amplitude = localizer.test(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+        sigma, means, amplitude = localizer.forward(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
 
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
@@ -99,5 +102,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    #batch = torch.randn((8, 200, 200))

@@ -9,6 +9,7 @@ class NotImplementedException:
 
 gray_color_table = [qRgb(i, i, i) for i in range(256)]
 
+
 def cvImgToQT(im, copy=False):
     if im is None:
         return QImage()
@@ -29,11 +30,13 @@ def cvImgToQT(im, copy=False):
 
     raise NotImplementedException
 
+
 def cvImgToQT(image):
     a = image
     height, width, channel = image.shape
     bytesPerLine = 3 * width
     return QImage(np.require(image, np.uint8, 'C'), width, height, bytesPerLine, QImage.Format_RGB888)
+
 
 all_views = []
 class ZoomableView(QGraphicsView):
