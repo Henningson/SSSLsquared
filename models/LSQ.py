@@ -106,11 +106,11 @@ class LSQLocalization:
 
         self.device = device
 
-
-
     def test(self, x, segmentation=None):
         heat = x[:, self.heatmapaxis, :, :].clone()
         heat = heat.unsqueeze(1)
+
+
 
         # Generate thresholded image
         threshed_heat = (heat > self.threshold) * heat
@@ -128,6 +128,9 @@ class LSQLocalization:
         # Find local maxima and indices at which we need to split the data
         maxima_indices = local_maxima.nonzero()
         split_indices = get_split_indices(maxima_indices[:, 0], device=self.device).tolist()
+
+        if type(split_indices) == int:
+            split_indices = [split_indices]
 
         # Extract windows around the local maxima
         intensities, y_windows, x_windows = extractWindow(heat[:, 0, :, :], maxima_indices, self.gauss_window_size, device=self.device)

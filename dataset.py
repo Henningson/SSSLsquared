@@ -42,7 +42,7 @@ class HLEPlusPlus(Dataset):
         glottal_mask_path = self.glottal_masks[index]
         vocalfold_mask_path = self.vocalfold_masks[index]
 
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255
 
         laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
         laserpoints[laserpoints == 255.0] = 1.0

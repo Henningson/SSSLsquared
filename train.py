@@ -19,6 +19,7 @@ import pygit2
 import Visualizer
 import numpy as np
 import cv2
+import utils
 import time
 import Losses
 
@@ -41,7 +42,7 @@ def main():
     args = parser.parse_args()
     LOG_WANDB = args.logwandb
 
-    config = load_config("config.yml")
+    config = utils.load_config("config.yml")
     checkpoint_name = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
     os.mkdir("checkpoints/" + checkpoint_name)
 
@@ -136,8 +137,6 @@ def main():
     print("\033[92m" + "Training Done!")
 
 
-def load_config(path):
-    return yaml.safe_load(Path(path).read_text())
 
 
 def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
