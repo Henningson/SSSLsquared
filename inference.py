@@ -49,10 +49,21 @@ def main():
     val_transforms = A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], features=config['features'], state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))).to(DEVICE)
+    model = neuralNet.Model(in_channels=1, 
+                            out_channels=config['num_classes'], 
+                            features=config['features'], 
+                            state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))
+                            ).to(DEVICE)
 
-    val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), transform=val_transforms)
-    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=4, pin_memory=True, shuffle=False)
+    val_ds = HLEPlusPlus(base_path=config['dataset_path'], 
+                         keys=config['val_keys'].split(","), 
+                         transform=val_transforms)
+
+    val_loader = DataLoader(val_ds, 
+                            batch_size=config['batch_size'], 
+                            num_workers=4, 
+                            pin_memory=True, 
+                            shuffle=False)
     
     localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
                                 gauss_window = config["gauss_window"], 
@@ -75,7 +86,7 @@ def main():
         prediction = model(images).softmax(dim=1)
         segmentation = prediction.argmax(dim=1)
 
-        sigma, means, amplitude = localizer.forward(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+        _, means, _ = localizer.forward(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
 
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
