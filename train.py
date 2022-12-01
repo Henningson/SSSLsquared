@@ -205,9 +205,9 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
         starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
         starter.record()
         pred_seg = model(images)
+        torch.cuda.synchronize()
         ender.record()
         
-        torch.cuda.synchronize()
 
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
         dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
