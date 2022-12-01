@@ -8,7 +8,7 @@ from albumentations.pytorch import ToTensorV2
 
 
 class HLEPlusPlus(Dataset):
-    def __init__(self, base_path, keys, transform=None):
+    def __init__(self, base_path, keys, pad_keypoints = 200, transform=None):
         self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
         self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
         self.glottal_mask_dirs = [os.path.join(base_path, key, "glottal_mask/") for key in keys]
@@ -17,11 +17,13 @@ class HLEPlusPlus(Dataset):
         
         self.transform = transform
         self.train_test_split = 0.9
+        self.pad_keypoints = pad_keypoints
 
         self.images = self.make_list(self.image_dirs)
         self.laserpoint_masks = self.make_list(self.mask_dirs)
         self.glottal_masks = self.make_list(self.glottal_mask_dirs)
         self.vocalfold_masks = self.make_list(self.vocalfold_mask_dirs)
+        self.laserpoints = self.make_list(self.laserpoints_dirs)
 
     def make_list(self, dirs):
         list = []
@@ -41,8 +43,9 @@ class HLEPlusPlus(Dataset):
         mask_path = self.laserpoint_masks[index]
         glottal_mask_path = self.glottal_masks[index]
         vocalfold_mask_path = self.vocalfold_masks[index]
+        point2D_path = self.laserpoints[index]
 
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32)
 
         laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
         laserpoints[laserpoints == 255.0] = 1.0
@@ -53,6 +56,8 @@ class HLEPlusPlus(Dataset):
         vocalfold_mask = np.array(Image.open(vocalfold_mask_path).convert("L"), dtype=np.float32)
         vocalfold_mask[vocalfold_mask == 255.0] = 3.0
 
+        keypoints = np.load(point2D_path)
+
         # Set class labels
         seg = np.zeros(glottal_mask.shape, dtype=np.float32)
         seg[vocalfold_mask == 3.0] = 2
@@ -60,13 +65,17 @@ class HLEPlusPlus(Dataset):
         seg[glottal_mask == 2.0] = 1
 
         if self.transform is not None:
-            augmentations = self.transform(image=image, mask=seg)
+            augmentations = self.transform(image=image, mask=seg, keypoints=keypoints)
             image = augmentations["image"]
             seg = augmentations["mask"]
+            keypoints = augmentations["keypoints"]
+        
+        # Pad keypoints, such that tensor have all the same size
+        keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        to_pad = self.pad_keypoints - keypoints.shape[0]
+        keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
 
-        testim = image*255
-
-        return image, seg
+        return image, seg, keypoints
 
 
 class HLEDataset(Dataset):
@@ -75,6 +84,7 @@ class HLEDataset(Dataset):
         self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
         self.glottal_mask_dirs = [os.path.join(base_path, key, "glottal_mask/") for key in keys]
         self.laserpoints_dirs = [os.path.join(base_path, key, "points2d/") for key in keys]
+
         self.transform = transform
 
         self.is_train = is_train
@@ -117,10 +127,10 @@ class HLEDataset(Dataset):
         glottal_mask = np.array(Image.open(glottal_mask_path).convert("L"), dtype=np.float32)
         glottal_mask[glottal_mask == 255.0] = 2.0
 
-        points2D = np.load(point2D_path)
+        keypoints = np.load(point2D_path)
 
         if self.transform is not None:
-            augmentations = self.transform(image=image, mask=mask, glottal_mask=glottal_mask, keypoints=points2D)
+            augmentations = self.transform(image=image, mask=mask, glottal_mask=glottal_mask, keypoints=keypoints)
             image = augmentations["image"]
             mask = augmentations["mask"]
             glottal_mask = augmentations["glottal_mask"]

@@ -100,7 +100,7 @@ def main():
             mean = mean[~np.isnan(mean).any(axis=1)]
             perFramePoints.append(mean)
 
-    video = (np.moveaxis(np.repeat(np.concatenate(video, axis=0), 3, axis=1), 1, -1)*255*255).astype(np.uint8)
+    video = (np.moveaxis(np.repeat(np.concatenate(video, axis=0), 3, axis=1), 1, -1)*255).astype(np.uint8)
     segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
     gt_segmentations = (np.moveaxis(np.concatenate(gt_segmentations, axis=0), 1, -1)*255).astype(np.uint8)
     error = (segmentations == gt_segmentations)*255

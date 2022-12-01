@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEDataset, JonathanDataset, HLEPlusPlus
+from dataset import HLEPlusPlus
 from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
@@ -20,8 +20,6 @@ import Visualizer
 import numpy as np
 import cv2
 import utils
-import time
-import Losses
 
 import sys
 sys.path.append("models/")
@@ -49,12 +47,11 @@ def main():
     train_transform = A.Compose(
         [
             A.Resize(height=config['image_height'], width=config['image_width']),
-            A.Affine(translate_percent = 0.1, p=0.25), #This leads to errors in combination with others
-            A.OpticalDistortion(border_mode = cv2.BORDER_CONSTANT, shift_limit=0.7, distort_limit = 0.7, p = 0.5),
+            A.Affine(translate_percent = 0.1, p=0.25),
             A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5),
-            A.HorizontalFlip(p=0.5), #0.5
-            A.VerticalFlip(p=0.25), #0.1
-            A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6],p=0.5),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.25),
+            A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6], p=0.5),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],
@@ -62,8 +59,9 @@ def main():
             ),
             ToTensorV2(),
         ],
-        #keypoint_params=A.KeypointParams(format='xy')
+        keypoint_params=A.KeypointParams(format='xy')
     )
+
     val_transforms = A.Compose(
         [
             A.Resize(height=config['image_height'], width=config['image_width']),
@@ -74,7 +72,7 @@ def main():
             ),
             ToTensorV2(),
         ],
-        #keypoint_params=A.KeypointParams(format='xy')
+        keypoint_params=A.KeypointParams(format='xy')
     )
 
     neuralNet = __import__(config["model"])
@@ -98,8 +96,8 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
 
-    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), transform=train_transform)
-    val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), transform=val_transforms)
+    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
+    val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=val_transforms)
 
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
@@ -137,13 +135,11 @@ def main():
     print("\033[92m" + "Training Done!")
 
 
-
-
 def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
-    for images, gt_seg in loop:
+    for images, gt_seg, _ in loop:
         optim.zero_grad()
 
         images = images.to(device=DEVICE)
@@ -169,7 +165,7 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", log_wand
         return
 
     model.eval()
-    for images, gt_seg in val_loader:
+    for images, gt_seg, _ in val_loader:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
@@ -177,7 +173,7 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", log_wand
 
         for i in range(images.shape[0]):
             wandb.log(
-            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().numpy()*255, masks={
+            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().numpy(), masks={
                 "predictions" : {
                     "mask_data" : pred_seg[i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
@@ -200,7 +196,7 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
 
     model.eval()
     loop = tqdm(val_loader, desc="EVAL")
-    for images, gt_seg in loop:
+    for images, gt_seg, _ in loop:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.long()
 
@@ -244,12 +240,13 @@ def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
     print("Inference Speed (ms): {:.3f}".format(inference_time / num_images))
 
-def generate_video(model, data_loader, path, log_wandb = False):
+
+def generate_video(model, data_loader, path):
     model.eval()
     count = 0
     video_list = []
     
-    for images, gt_seg in data_loader:
+    for images, gt_seg, _ in data_loader:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
@@ -268,9 +265,6 @@ def generate_video(model, data_loader, path, log_wandb = False):
         count += images.shape[0]
 
     video = np.stack(video_list, axis=0)
-
-    if log_wandb:
-        wandb.log({"video": wandb.Video(video.reshape(video.shape[0], video.shape[1], video.shape[3], video.shape[2]), fps=4)})
 
     out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
     for frame in video_list:
