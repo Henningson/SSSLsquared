@@ -160,7 +160,7 @@ def train(train_loader, loss_func, model, optim, epoch, log_wandb = False):
         wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
 
 
-def visualize(val_loader, model, epoch, title="Validation Predictions", log_wandb = False):
+def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=2, log_wandb=False):
     if not log_wandb:
         return
 
@@ -171,7 +171,7 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", log_wand
 
         pred_seg = model(images).softmax(dim=1).argmax(dim=1)
 
-        for i in range(images.shape[0]):
+        for i in range(num_log):
             wandb.log(
             {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().numpy(), masks={
                 "predictions" : {
