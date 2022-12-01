@@ -79,7 +79,7 @@ def main():
     colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'])]
 
     model.eval()
-    for images, gt_seg in tqdm(val_loader, desc="Generating Video Frames"):
+    for images, gt_seg, _ in tqdm(val_loader, desc="Generating Video Frames"):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 

@@ -9,19 +9,17 @@ class nnPrecision:
         self.precisions = []
 
     def __call__(self, pred, gt) -> float:
-        for batch in pred.shape[0]:
+        for batch in range(len(pred)):
             batch_pred = pred[batch]
             batch_gt = gt[batch]
             
             batched_tp = 0
             batched_fp = 0
             for i in range(batch_gt.shape[0]):
-                index, distance = self.findNearestNeighbour(batch_gt[i], batch_pred)
-
+                _, distance = self.findNearestNeighbour(batch_gt[i], batch_pred)
                 if distance < self.threshold:
                     batched_tp += 1
-                
-                if distance > self.threshold:
+                else:
                     batched_fp += 1
 
         precision = batched_tp / (batched_tp + batched_fp)
@@ -37,8 +35,44 @@ class nnPrecision:
     def compute(self):
         return sum(self.precisions) / len(self.precisions)
 
+
+class nnMSE:
+    def __init__(self, threshold = 3.0):
+        self.threshold = threshold
+        self.distances = []
+
+    def __call__(self, pred, gt) -> float:
+        batched_distance = 0
+        neighbours = 0
+
+        for batch in range(len(pred)):
+            batch_pred = pred[batch]
+            batch_gt = gt[batch]
+            for i in range(batch_gt.shape[0]):
+                _, distance = self.findNearestNeighbour(batch_gt[i], batch_pred)
+                
+                if distance < self.threshold:
+                    batched_distance += distance
+                    neighbours += 1
+
+        l2 = batched_distance / neighbours
+        self.distances.append(l2)
+        return l2
+
+    def findNearestNeighbour(self, point, target_points) -> int:
+        if len(point.shape) == 1:
+            point = point.unsqueeze(0)
+        dist = torch.linalg.norm(point - target_points, dim=1)
+        return torch.argmin(dist), dist.min()
+
+    def compute(self):
+        return sum(self.distances) / len(self.distances)
+
 if __name__ == "__main__":
-    prec = nnPrecision()
+    Precision = nnMSE(threshold=0.5)
     
-    estimated = np.random.randn(2, 15)
-    gt = np.random.randn(2, 13)
+    estimated = [torch.randn(15, 2)]
+    gt = [torch.randn(13, 2)]
+    print(gt)
+    print(Precision(estimated, gt))
+    print(Precision.compute())
