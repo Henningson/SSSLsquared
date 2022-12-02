@@ -99,6 +99,7 @@ class MainWindow(QMainWindow):
         self.gt_pen = QPen(QColor(0, 255, 255, 255))
         self.gt_brush = QBrush(QColor(0, 255, 255, 128))
 
+        self.show_pred_points = True
         self.show_gt_points = True
 
         self.pointsize = 5
@@ -110,8 +111,13 @@ class MainWindow(QMainWindow):
             self.nextImage()
         elif event.key() == Qt.Key_A:
             self.prevImage()
+        elif event.key() == Qt.Key_W:
+            self.show_pred_points = not self.show_pred_points
+            print("Drawing Prediction Points: {}".format(self.show_pred_points))
+            self._redraw()
         elif event.key() == Qt.Key_S:
             self.show_gt_points = not self.show_gt_points
+            print("Drawing GT Points: {}".format(self.show_gt_points))
             self._redraw()
         elif event.key() == Qt.Key_Space:
              self.seg_view.zoomReset()
@@ -133,7 +139,9 @@ class MainWindow(QMainWindow):
         self.redraw(self.error_scene, self.errors)
         self.redraw(self.video_scene, self.video)
 
-        self.drawPoints(self.video_scene, self.pred_points, self.pen, self.brush)
+        if self.show_pred_points:
+            self.drawPoints(self.video_scene, self.pred_points, self.pen, self.brush)
+        
         if self.show_gt_points:
             self.drawPoints(self.video_scene, self.gt_points, self.gt_pen, self.gt_brush)
 

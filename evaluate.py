@@ -24,7 +24,7 @@ sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def evaluate(val_loader, model, localizer, loss_func, epoch = -1, log_wandb = False):
+def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False):
     Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
     DICE = torchmetrics.Dice(num_classes=4)
     IOU = torchmetrics.JaccardIndex(num_classes=4)
@@ -51,60 +51,66 @@ def evaluate(val_loader, model, localizer, loss_func, epoch = -1, log_wandb = Fa
         torch.cuda.synchronize()
         ender_cnn.record()
 
-        starter_lsq, ender_lsq = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
-        starter_lsq.record()
-        segmentation = pred_seg.softmax(dim=1)
-        segmentation_argmax = segmentation.argmax(dim=1)
-        _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
-        torch.cuda.synchronize()
-        ender_lsq.record()
-        
-
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
         dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
-
-        mse = nnMSE([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())
-        precision = nnPrecision([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())
-
         loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
 
         curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
-        curr_time_point_detection = starter_lsq.elapsed_time(ender_lsq)
-
         inference_time += curr_time_cnn
-        point_detection_time += curr_time_point_detection
-
         num_images += images.shape[0]
-        
         running_average += loss
+        
+        if localizer is not None:
+            starter_lsq, ender_lsq = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+            starter_lsq.record()
+            segmentation = pred_seg.softmax(dim=1)
+            segmentation_argmax = segmentation.argmax(dim=1)
+            _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+            torch.cuda.synchronize()
+            ender_lsq.record()
 
-        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Precision": precision, "MSE": mse, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
+            mse = nnMSE([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())
+            precision = nnPrecision([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())
+
+            curr_time_point_detection = starter_lsq.elapsed_time(ender_lsq)
+            point_detection_time += curr_time_point_detection
+
+        if localizer is not None:
+            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Precision": precision, "MSE": mse, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
+        else:
+            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn})
 
     total_acc = Accuracy.compute()
     total_dice = DICE.compute()
     total_IOU = IOU.compute()
-    total_mse = nnMSE.compute()
-    total_precision = nnPrecision.compute()
+    eval_loss = running_average / len(val_loader)
+
+    if localizer is not None:
+        total_mse = nnMSE.compute()
+        total_precision = nnPrecision.compute()
+    
     
     if log_wandb:
-        wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
+        wandb.log({"Eval Loss": eval_loss}, step=epoch)
         wandb.log({"Eval Accuracy": total_acc}, step=epoch)
         wandb.log({"Eval DICE": total_dice}, step=epoch)
         wandb.log({"Eval IOU": total_IOU}, step=epoch)
         wandb.log({"Inference Time (ms)": inference_time / num_images}, step=epoch)
 
     print("_____EPOCH {0}_____".format(epoch))
-    print("Eval Loss: {1}".format(epoch, running_average / len(val_loader)))
+    print("Eval Loss: {1}".format(epoch, eval_loss))
     print("Eval Accuracy: {1}".format(epoch, total_acc))
     print("Eval IOU: {1}".format(epoch, total_IOU))
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
-    
-    print("Eval MSE: {1}".format(epoch, total_mse))
-    print("Eval PRECISION {0}: {1}".format(epoch, total_precision))
-
     print("Inference Speed (ms): {:.3f}".format(inference_time / num_images))
-    print("Point Detection (ms): {:.3f}".format(point_detection_time / num_images))
+    
+    if localizer is not None:
+        print("Eval MSE: {1}".format(epoch, total_mse))
+        print("Eval PRECISION {0}: {1}".format(epoch, total_precision))
+        print("Point Detection (ms): {:.3f}".format(point_detection_time / num_images))
+
+    return eval_loss
 
 
 def main():
@@ -146,7 +152,7 @@ def main():
                                 heatmapaxis = config["heatmapaxis"], 
                                 threshold = config["threshold"])
 
-    evaluate(val_loader, model, localizer, loss)
+    evaluate(val_loader, model, loss, localizer=localizer)
 
 if __name__ == "__main__":
     main()

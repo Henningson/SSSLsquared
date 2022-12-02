@@ -117,7 +117,10 @@ def main():
 
     for epoch in range(config['num_epochs']):
         # Evaluate on Validation Set
-        evaluate(val_loader, model, loss, epoch, log_wandb=LOG_WANDB)
+        eval_loss = evaluate(val_loader, model, loss, epoch=epoch, log_wandb=LOG_WANDB)
+
+        if eval_loss < config['eval_threshold']:
+            break
 
         # Visualize Validation as well as Training Set examples
         visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
