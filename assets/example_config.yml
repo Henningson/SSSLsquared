@@ -1,8 +1,9 @@
 model: 'UNet'
 
 learning_rate: 0.01
-batch_size: 2
+batch_size: 4
 features: [32, 64, 128, 256, 512, 1024]
+eval_threshold: 0.04
 
 last_epoch: -1
 num_epochs: 100
@@ -11,6 +12,8 @@ num_classes: 4
 image_height: 512
 image_width: 256
 
+keypoint_regularization_at: 10
+
 dataset_path: '../HLEDataset/dataset/'
 
 train_keys: CF,CM,DD,FH,LS,RH,SS,TM
@@ -18,5 +21,8 @@ val_keys: MK,MS
 
 gauss_window: 5
 maxima_window: 11
+threshold: 0.5
+heatmapaxis: 3
+pad_keypoints: 200
 
 is_color: false
