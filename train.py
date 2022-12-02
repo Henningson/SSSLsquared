@@ -210,9 +210,7 @@ def generate_video(model, data_loader, path):
         frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
         video_list.append(frame)
         count += images.shape[0]
-
-    video = np.stack(video_list, axis=0)
-
+        
     out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
     for frame in video_list:
         out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
