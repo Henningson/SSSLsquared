@@ -11,7 +11,10 @@ class nnPrecision:
     def __call__(self, pred, gt) -> float:
         for batch in range(len(pred)):
             batch_pred = pred[batch]
+            batch_pred = batch_pred[~torch.isnan(batch_pred).any(axis=1)]
+
             batch_gt = gt[batch]
+            batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
             
             batched_tp = 0
             batched_fp = 0
@@ -47,7 +50,11 @@ class nnMSE:
 
         for batch in range(len(pred)):
             batch_pred = pred[batch]
+            batch_pred = batch_pred[~torch.isnan(batch_pred).any(axis=1)]
+
             batch_gt = gt[batch]
+            batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
+            
             for i in range(batch_gt.shape[0]):
                 _, distance = self.findNearestNeighbour(batch_gt[i], batch_pred)
                 

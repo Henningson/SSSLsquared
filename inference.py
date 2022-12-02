@@ -37,7 +37,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2022-11-29-20:03:00/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2022-12-01-10:52:50/")
     
     args = parser.parse_args()
     checkpoint_path = args.checkpoint
@@ -76,17 +76,18 @@ def main():
     gt_segmentations = []
 
     perFramePoints = []
+    gt_points = []
     colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'])]
 
     model.eval()
-    for images, gt_seg, _ in tqdm(val_loader, desc="Generating Video Frames"):
+    for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
         prediction = model(images).softmax(dim=1)
         segmentation = prediction.argmax(dim=1)
 
-        _, means, _ = localizer.forward(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+        _, means, _ = localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
 
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
@@ -95,10 +96,15 @@ def main():
         segmentations.append(segmentation)
         gt_segmentations.append(gt_seg)
 
+        for i in range(images.shape[0]):
+            cleaned_keypoints = keypoints[i][~torch.isnan(keypoints[i]).any(axis=1)]
+            gt_points.append(cleaned_keypoints[:, [1, 0]] - 1)
+
         for mean in means:
             mean = mean.cpu().detach().numpy()
             mean = mean[~np.isnan(mean).any(axis=1)]
             perFramePoints.append(mean)
+
 
     video = (np.moveaxis(np.repeat(np.concatenate(video, axis=0), 3, axis=1), 1, -1)*255).astype(np.uint8)
     segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
@@ -107,7 +113,7 @@ def main():
 
     app = QApplication(sys.argv) 
     app.setPalette(DarkPalette())
-    mw = viewer.MainWindow(video, segmentations, gt_segmentations, error, perFramePoints)
+    mw = viewer.MainWindow(video, segmentations, gt_segmentations, error, perFramePoints, gt_points)
     mw.show()
     sys.exit(app.exec_())
 

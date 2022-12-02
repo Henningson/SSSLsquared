@@ -57,7 +57,8 @@ class HLEPlusPlus(Dataset):
         vocalfold_mask[vocalfold_mask == 255.0] = 3.0
 
         keypoints = np.load(point2D_path)
-
+        keypoints[~(keypoints == 0).any(axis=1)]
+        
         # Set class labels
         seg = np.zeros(glottal_mask.shape, dtype=np.float32)
         seg[vocalfold_mask == 3.0] = 2
@@ -74,6 +75,7 @@ class HLEPlusPlus(Dataset):
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
         to_pad = self.pad_keypoints - keypoints.shape[0]
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
+        keypoints[(keypoints == 0.0)] = torch.nan
 
         return image, seg, keypoints
 

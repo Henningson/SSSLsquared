@@ -11,9 +11,8 @@ import LRscheduler
 import datetime
 import yaml
 from pathlib import Path
+from evaluate import evaluate
 import os
-import matplotlib.pyplot as plt
-import torchmetrics
 import argparse
 import pygit2
 import Visualizer
@@ -184,61 +183,6 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
                 }
             })}, step=epoch)
         return
-
-
-def evaluate(val_loader, model, loss_func, epoch, log_wandb = False):
-    Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
-    DICE = torchmetrics.Dice(num_classes=4)
-    IOU = torchmetrics.JaccardIndex(num_classes=4)
-    running_average = 0.0
-    inference_time = 0
-    num_images = 0
-
-    model.eval()
-    loop = tqdm(val_loader, desc="EVAL")
-    for images, gt_seg, _ in loop:
-        images = images.to(device=DEVICE)
-        gt_seg = gt_seg.long()
-
-        torch.cuda.synchronize()
-
-        starter, ender = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
-        starter.record()
-        pred_seg = model(images)
-        torch.cuda.synchronize()
-        ender.record()
-        
-
-        acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
-        dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
-        iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
-        loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
-
-        curr_time = starter.elapsed_time(ender)
-        inference_time += curr_time
-        num_images += images.shape[0]
-        
-        running_average += loss
-
-        loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time})
-
-    total_acc = Accuracy.compute()
-    total_dice = DICE.compute()
-    total_IOU = IOU.compute()
-    
-    if log_wandb:
-        wandb.log({"Eval Loss": running_average / len(val_loader)}, step=epoch)
-        wandb.log({"Eval Accuracy": total_acc}, step=epoch)
-        wandb.log({"Eval DICE": total_dice}, step=epoch)
-        wandb.log({"Eval IOU": total_IOU}, step=epoch)
-        wandb.log({"Inference Time (ms)": inference_time / num_images}, step=epoch)
-
-    print("_____EPOCH {0}_____".format(epoch))
-    print("Eval Loss: {1}".format(epoch, running_average / len(val_loader)))
-    print("Eval Accuracy: {1}".format(epoch, total_acc))
-    print("Eval IOU: {1}".format(epoch, total_IOU))
-    print("Eval DICE {0}: {1}".format(epoch, total_dice))
-    print("Inference Speed (ms): {:.3f}".format(inference_time / num_images))
 
 
 def generate_video(model, data_loader, path):

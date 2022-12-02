@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         return scene, view
 
-    def __init__(self, video, segmentations, gt_segmentations, errors, points):
+    def __init__(self, video, segmentations, gt_segmentations, errors, pred_points, gt_points):
         QMainWindow.__init__(self)
         self.setMinimumSize(QSize(800, 600))
         self.setWindowTitle("Inference Viewer")
@@ -74,7 +74,10 @@ class MainWindow(QMainWindow):
         self.segmentations = segmentations
         self.gt_segmentations = gt_segmentations
         self.errors = errors
-        self.points = points
+
+        self.gt_points = gt_points
+        self.pred_points = pred_points
+        
         self.current_img_index = 0
 
         self.video_scene, self.video_view = self.initScene()
@@ -90,8 +93,14 @@ class MainWindow(QMainWindow):
         mainwidget.layout().addWidget(self.error_view)
         self.setCentralWidget(mainwidget)
 
-        self.pen = QPen(QColor(128, 255, 128, 255))
-        self.brush = QBrush(QColor(128, 255, 128, 128))
+        self.pen = QPen(QColor(0, 255, 0, 255))
+        self.brush = QBrush(QColor(0, 255, 0, 128))
+
+        self.gt_pen = QPen(QColor(0, 255, 255, 255))
+        self.gt_brush = QBrush(QColor(0, 255, 255, 128))
+
+        self.show_gt_points = True
+
         self.pointsize = 5
 
         self._redraw()
@@ -101,6 +110,9 @@ class MainWindow(QMainWindow):
             self.nextImage()
         elif event.key() == Qt.Key_A:
             self.prevImage()
+        elif event.key() == Qt.Key_S:
+            self.show_gt_points = not self.show_gt_points
+            self._redraw()
         elif event.key() == Qt.Key_Space:
              self.seg_view.zoomReset()
              self.video_view.zoomReset()
@@ -119,18 +131,19 @@ class MainWindow(QMainWindow):
         self.redraw(self.seg_scene, self.segmentations)
         self.redraw(self.gtseg_scene, self.gt_segmentations)
         self.redraw(self.error_scene, self.errors)
-        self.redraw(self.video_scene, self.video, draw_points=True)
+        self.redraw(self.video_scene, self.video)
 
-    def redraw(self, scene, images, draw_points = False):
+        self.drawPoints(self.video_scene, self.pred_points, self.pen, self.brush)
+        if self.show_gt_points:
+            self.drawPoints(self.video_scene, self.gt_points, self.gt_pen, self.gt_brush)
+
+    def redraw(self, scene, images):
         scene.clear()
         img = QPixmap(cvImgToQT(images[self.current_img_index]))
         scene.addPixmap(img)
 
-        if draw_points:
-            self.draw_points(scene)
-
-    def draw_points(self, scene):
-        for point in self.points[self.current_img_index].tolist():
+    def drawPoints(self, scene, points, pen, brush):
+        for point in points[self.current_img_index].tolist():
             xpos = point[1] - self.pointsize//2
             ypos = point[0] - self.pointsize//2
-            scene.addEllipse(xpos, ypos, self.pointsize, self.pointsize, self.pen, self.brush)
+            scene.addEllipse(xpos, ypos, self.pointsize, self.pointsize, pen, brush)
