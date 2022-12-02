@@ -46,11 +46,11 @@ def main():
     train_transform = A.Compose(
         [
             A.Resize(height=config['image_height'], width=config['image_width']),
-            A.Affine(translate_percent = 0.1, p=0.25),
-            A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5),
+            A.Affine(translate_percent = 0.15, p=0.5),
+            A.Rotate(limit=40, border_mode = cv2.BORDER_CONSTANT, p=0.5),
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.25),
-            A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6], p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.Perspective(scale=(0.05, 0.2), p=0.5),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],

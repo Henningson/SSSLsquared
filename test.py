@@ -76,32 +76,39 @@ from dataset import HLEPlusPlus
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
 import torchvision
-
-
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+import torchvision.transforms.functional as F
+import numpy as np
+import matplotlib.pyplot as plt
 
 def show(imgs):
     if not isinstance(imgs, list):
         imgs = [imgs]
     fig, axs = plt.subplots(ncols=len(imgs), squeeze=False)
+    
+    canvas = FigureCanvas(fig)
     for i, img in enumerate(imgs):
         img = img.detach()
         img = F.to_pil_image(img)
         axs[0, i].imshow(np.asarray(img))
         axs[0, i].set(xticklabels=[], yticklabels=[], xticks=[], yticks=[])
 
+    canvas.draw()
+    image_from_plot = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    image_from_plot = image_from_plot.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    return image_from_plot
+
 def testAugmentations():
     config = utils.load_config("config.yml")
-    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
-    train_loader = DataLoader(train_ds, batch_size=8, num_workers=2, pin_memory=True, shuffle=True)
 
     train_transform = A.Compose(
         [
             A.Resize(height=config['image_height'], width=config['image_width']),
-            A.Affine(translate_percent = 0.1, p=0.25),
-            A.Rotate(limit=60, border_mode = cv2.BORDER_CONSTANT, p=0.5),
+            A.Affine(translate_percent = 0.15, p=0.5),
+            A.Rotate(limit=40, border_mode = cv2.BORDER_CONSTANT, p=0.5),
             A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.25),
-            A.RandomBrightnessContrast(contrast_limit = [-0.10, 0.6], p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.Perspective(scale=(0.05, 0.2), p=0.5),
             A.Normalize(
                 mean=[0.0],
                 std=[1.0],
@@ -112,9 +119,14 @@ def testAugmentations():
         keypoint_params=A.KeypointParams(format='xy')
     )
 
+    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
+    train_loader = DataLoader(train_ds, batch_size=8, num_workers=2, pin_memory=True, shuffle=True)
+
+
     for im, seg, key in train_loader:
         grid = torchvision.utils.make_grid(im)
-        show(grid)
+        image = show(grid)
+        a = 1
 
 if __name__ == "__main__":
     testAugmentations()
