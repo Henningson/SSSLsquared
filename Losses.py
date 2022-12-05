@@ -1,5 +1,31 @@
 import torch
 
+def findNearestNeighbour(point, target_points) -> int:
+        if len(point.shape) == 1:
+            point = point.unsqueeze(0)
+        dist = torch.linalg.norm(point - target_points, dim=1)
+        return torch.argmin(dist), dist.min()
+
+def nnLoss(pred, gt, threshold):
+    batched_distance = 0 
+    neighbours = 0
+
+    for batch in range(len(pred)):
+        batch_pred = pred[batch]
+        batch_pred = batch_pred[~torch.isnan(batch_pred).any(axis=1)]
+
+        batch_gt = gt[batch]
+        batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
+        
+        for i in range(batch_gt.shape[0]):
+            _, distance = findNearestNeighbour(batch_gt[i], batch_pred)
+            
+            if distance < threshold:
+                batched_distance += distance
+                neighbours += 1
+
+    return batched_distance / neighbours if neighbours != 0 else 0
+
 
 def nearestNeighborLoss(pointsA, pointsB, t0 = None, t1 = None):
     nearest_neighbor_loss = 0.0
