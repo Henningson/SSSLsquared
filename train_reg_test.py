@@ -74,23 +74,23 @@ def main():
                                 heatmapaxis = config["heatmapaxis"], 
                                 threshold = config["threshold"])
 
-        #evaluate.evaluate(val_loader, model, loss, localizer=localizer, epoch=epoch)
+        evaluate.evaluate(val_loader, model, loss, localizer=localizer, epoch=epoch)
 
         train(train_loader, 
                 loss, 
                 model, 
-                optimizer, 
+                scheduler, 
                 epoch, 
                 localizer, 
-                start_reg=config['keypoint_regularization_at'],
-                threshold = config['nn_threshold'], 
+                start_reg=epoch > config['keypoint_regularization_at'],
+                keypoint_lambda=config['keypoint_lambda'], 
                 log_wandb=False)
 
-        #checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
-        #torch.save(checkpoint, os.path.join(checkpoint_path, "model_test.pth.tar"))
+        checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
+        torch.save(checkpoint, os.path.join(checkpoint_path, "model.pth.tar"))
 
 
-def train(train_loader, loss_func, model, optim, epoch, localizer, start_reg = 5, threshold = 0.2, log_wandb = False):
+def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False):
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
@@ -108,20 +108,22 @@ def train(train_loader, loss_func, model, optim, epoch, localizer, start_reg = 5
 
         segmentation = pred_seg.softmax(dim=1)
         segmentation_argmax = segmentation.argmax(dim=1)
+ 
+        if use_regression:
+            try:
+                _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+            except:
+                print("Matrix probably singular. Whoopsie.")
+                continue
 
-        try:
-            _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
-        except:
-            continue
-
-        if pred_keypoints is not None:
-            #pred_keypoints = [keypoints[~torch.isnan(keypoints).any(axis=1)] for keypoints in pred_keypoints]
-            add_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
-            #print(add_loss)
-            loss += 0.1 * (add_loss if type(add_loss) == float else add_loss.item())
+            if pred_keypoints is not None:
+                keypoint_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
+                loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
 
         loss.backward()
-        optim.step()
+
+        # Scheduler invokes the optimizers step function
+        scheduler.step()
 
         running_average += loss.item()
         loop.set_postfix(loss=loss.item())

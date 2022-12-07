@@ -19,5 +19,6 @@ class PolynomialLR:
     def step(self):
         self.last_epoch += 1
 
+        self.optimizer.step()
         for g in self._optimizer.param_groups:
             g['lr'] = self._base_lr * pow(1 - self.last_epoch/self._total_iters, self._power)

@@ -126,7 +126,7 @@ def main():
 
     for epoch in range(config['num_epochs']):
         # Evaluate on Validation Set
-        #evaluate(val_loader, model, loss, epoch=epoch, log_wandb=LOG_WANDB)
+        evaluate(val_loader, model, loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
         visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
@@ -136,12 +136,12 @@ def main():
         train(train_loader, 
                 loss, 
                 model, 
-                optimizer, 
+                scheduler, 
                 epoch, 
                 localizer, 
-                start_reg=config['keypoint_regularization_at'],
-                threshold = config['eval_threshold'], 
-                log_wandb=LOG_WANDB)
+                use_regression=epoch > config['keypoint_regularization_at'],
+                keypoint_lambda=config['keypoint_lambda'], 
+                log_wandb=False)
 
     #if LOG_WANDB:
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
@@ -150,10 +150,11 @@ def main():
     if LOG_WANDB:
         generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
         generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
+
     print("\033[92m" + "Training Done!")
 
 
-def train(train_loader, loss_func, model, optim, epoch, localizer, start_reg = 5, threshold = 0.2, log_wandb = False):
+def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False):
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
@@ -169,23 +170,24 @@ def train(train_loader, loss_func, model, optim, epoch, localizer, start_reg = 5
         
         loss = loss_func(pred_seg.float(), gt_seg.long())
 
-        if epoch > start_reg:
-            exit()
-            segmentation = pred_seg.softmax(dim=1)
-            segmentation_argmax = segmentation.argmax(dim=1)
-            _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+        segmentation = pred_seg.softmax(dim=1)
+        segmentation_argmax = segmentation.argmax(dim=1)
+ 
+        if use_regression:
+            try:
+                _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+            except:
+                print("Matrix probably singular. Whoopsie.")
+                continue
 
             if pred_keypoints is not None:
-                #pred_keypoints = [keypoints[~torch.isnan(keypoints).any(axis=1)] for keypoints in pred_keypoints]
-                add_loss = Losses.nnLoss(pred_keypoints, gt_keypoints[:, :, [1, 0]], threshold)
-                
-                if add_loss > 0:
-                    print(add_loss)
-
-                loss += add_loss
+                keypoint_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
+                loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
 
         loss.backward()
-        optim.step()
+
+        # Scheduler invokes the optimizers step function
+        scheduler.step()
 
         running_average += loss.item()
         loop.set_postfix(loss=loss.item())
