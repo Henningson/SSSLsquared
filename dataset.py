@@ -65,14 +65,19 @@ class HLEPlusPlus(Dataset):
         seg[laserpoints == 1.0] = 3
         seg[glottal_mask == 2.0] = 1
 
+        transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
+
         if self.transform is not None:
-            augmentations = self.transform(image=image, mask=seg, keypoints=keypoints)
+            augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
             image = augmentations["image"]
-            seg = augmentations["mask"]
+            seg = augmentations["masks"][0]
+            transformed_vf_mask = augmentations["masks"][1]
             keypoints = augmentations["keypoints"]
         
         # Pad keypoints, such that tensor have all the same size
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        if keypoints.nelement() != 0:
+            keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
         to_pad = self.pad_keypoints - keypoints.shape[0]
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
         keypoints[(keypoints == 0.0)] = torch.nan

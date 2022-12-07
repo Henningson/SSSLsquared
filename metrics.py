@@ -15,7 +15,10 @@ class nnPrecision:
 
             batch_gt = gt[batch]
             batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
-            
+        
+            if len(batch_pred) == 0:
+                continue
+                
             batched_tp = 0
             batched_fp = 0
             for i in range(batch_gt.shape[0]):
@@ -25,7 +28,7 @@ class nnPrecision:
                 else:
                     batched_fp += 1
 
-        precision = batched_tp / (batched_tp + batched_fp)
+        precision = batched_tp / (batched_tp + batched_fp) if batched_tp + batched_fp != 0 else 0
         self.precisions.append(precision)
         return precision
 
@@ -52,6 +55,9 @@ class nnMSE:
             batch_pred = pred[batch]
             batch_pred = batch_pred[~torch.isnan(batch_pred).any(axis=1)]
 
+            if len(batch_pred) == 0:
+                continue
+
             batch_gt = gt[batch]
             batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
             
@@ -62,7 +68,7 @@ class nnMSE:
                     batched_distance += distance
                     neighbours += 1
 
-        l2 = batched_distance / neighbours
+        l2 = batched_distance / neighbours if neighbours != 0 else 0
         self.distances.append(l2)
         return l2
 

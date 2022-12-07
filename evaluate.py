@@ -29,8 +29,8 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     DICE = torchmetrics.Dice(num_classes=4)
     IOU = torchmetrics.JaccardIndex(num_classes=4)
 
-    nnMSE = metrics.nnMSE(threshold=2.0)
-    nnPrecision = metrics.nnPrecision(threshold=2.0)
+    nnMSE = metrics.nnMSE(threshold=3.0)
+    nnPrecision = metrics.nnPrecision(threshold=3.0)
 
     running_average = 0.0
     inference_time = 0
@@ -69,6 +69,9 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
             torch.cuda.synchronize()
             ender_lsq.record()
+
+            if pred_keypoints is None:
+                continue
 
             mse = nnMSE([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())
             precision = nnPrecision([i[:, [1, 0]].detach().cpu() for i in pred_keypoints], keypoints.detach().cpu())

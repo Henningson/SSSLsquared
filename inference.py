@@ -37,7 +37,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2022-12-01-10:52:50/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2022-12-06-13:34:51/")
     
     args = parser.parse_args()
     checkpoint_path = args.checkpoint
@@ -52,7 +52,7 @@ def main():
     model = neuralNet.Model(in_channels=1, 
                             out_channels=config['num_classes'], 
                             features=config['features'], 
-                            state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))
+                            state_dict=torch.load(os.path.join(checkpoint_path, "model_test.pth.tar"))
                             ).to(DEVICE)
 
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], 

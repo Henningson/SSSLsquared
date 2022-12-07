@@ -58,7 +58,17 @@ def get_basis(x, y):
 
 
 def get_split_indices(nonzeros_indexing, device='cuda'):
-    return (nonzeros_indexing - torch.concat([torch.zeros(1).to(device), nonzeros_indexing])[0:-1]).nonzero().squeeze()
+    index_jumps = nonzeros_indexing - torch.concat([torch.zeros(1).to(device), nonzeros_indexing])[0:-1]
+    split_at = index_jumps.nonzero().squeeze()
+    
+    split_at = split_at.unsqueeze(0) if split_at.dim() == 0 else split_at
+
+    split_list = []
+    for i in range(len(split_at)):
+        for j in range(index_jumps[split_at[i]].long()):
+            split_list.append(split_at[i])
+
+    return torch.tensor(split_list, device=device)
 
             
 def GuosBatchAnalytic(x, y, z):
@@ -71,6 +81,10 @@ def GuosBatchAnalytic(x, y, z):
     #c = (torch.linalg.lstsq(ATA, A.transpose(1, 2)).solution @ b.unsqueeze(-1)).squeeze()
     #c = (torch.linalg.pinv(ATA) @ A.transpose(1, 2) @ b.unsqueeze(-1)).squeeze()
     c = (ATA.inverse() @ A.transpose(1, 2) @ b.unsqueeze(-1)).squeeze()
+
+    if len(c.shape) == 1:
+        c = c.unsqueeze(0)
+
     return poly_to_gauss(c[:, [2,5]], c[:, [1,3]], c[:, [0,4]])
 
 
@@ -125,6 +139,10 @@ class LSQLocalization:
 
         # Find local maxima and indices at which we need to split the data
         maxima_indices = local_maxima.nonzero()
+
+        if len(maxima_indices) == 0:
+            return None, None, None
+
         split_indices = get_split_indices(maxima_indices[:, 0], device=self.device).tolist()
 
         split_indices = [split_indices] if type(split_indices) == int else split_indices
@@ -144,3 +162,16 @@ class LSQLocalization:
 
         # Split the tensors and return lists of sigma, mus, and the amplitudes per batch
         return torch.tensor_split(sigma, split_indices), torch.tensor_split(mu, split_indices), torch.tensor_split(amplitude, split_indices)
+
+
+
+
+if __name__ == "__main__":
+    device = 'cpu'
+    loc = LSQLocalization(heatmapaxis=1, device=device)
+    val = torch.rand(4, 2, 128, 128)
+
+    val *= 0.0
+
+    _, mean, _ = loc.estimate(val)
+    a = 1

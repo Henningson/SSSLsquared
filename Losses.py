@@ -1,10 +1,37 @@
 import torch
+import sys
+sys.path.append("ChamferDistancePytorch")
+import chamfer2D.dist_chamfer_2D
+import chamfer_python
 
 def findNearestNeighbour(point, target_points) -> int:
         if len(point.shape) == 1:
             point = point.unsqueeze(0)
         dist = torch.linalg.norm(point - target_points, dim=1)
         return torch.argmin(dist), dist.min()
+
+
+def chamfer(prediction, gt):
+    loss = 0.0
+
+    chamLoss = chamfer2D.dist_chamfer_2D.chamfer_2DDist()
+
+    for i, pred in enumerate(prediction):
+        batch_pred = pred[~torch.isnan(pred).any(axis=1)]
+        batch_gt = gt[i][~torch.isnan(gt[i]).any(axis=1)]
+
+        if batch_pred.nelement() == 0:
+            continue
+
+        if batch_gt.nelement() == 0:
+            continue
+
+        d1, d2, idx1, idx2 = chamLoss(batch_pred.unsqueeze(0), batch_gt[:, [1, 0]].unsqueeze(0))
+        #loss += torch.mean(d1) + torch.mean(d2)
+        loss += (torch.mean(d1) + torch.mean(d2)) / (2*(d1.shape[1] + d1.shape[1]))
+
+    return loss
+
 
 def nnLoss(pred, gt, threshold):
     batched_distance = 0 
@@ -17,6 +44,9 @@ def nnLoss(pred, gt, threshold):
         batch_gt = gt[batch]
         batch_gt = batch_gt[~torch.isnan(batch_gt).any(axis=1)]
         
+        if len(batch_pred) == 0:
+            continue
+
         for i in range(batch_gt.shape[0]):
             _, distance = findNearestNeighbour(batch_gt[i], batch_pred)
             
@@ -24,7 +54,8 @@ def nnLoss(pred, gt, threshold):
                 batched_distance += distance
                 neighbours += 1
 
-    return batched_distance / neighbours if neighbours != 0 else 0
+    #print(neighbours)
+    return torch.tensor([batched_distance / neighbours], device=gt.device) if neighbours != 0 else torch.tensor([0], device=gt.device)
 
 
 def nearestNeighborLoss(pointsA, pointsB, t0 = None, t1 = None):

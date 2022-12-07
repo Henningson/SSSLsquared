@@ -44,8 +44,8 @@ def main():
     config = utils.load_config("config.yml")
     checkpoint_name = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
 
-    if LOG_WANDB:
-        os.mkdir("checkpoints/" + checkpoint_name)
+    #if LOG_WANDB:
+    os.mkdir("checkpoints/" + checkpoint_name)
 
     train_transform = A.Compose(
         [
@@ -118,11 +118,11 @@ def main():
         wandb.config["dataset_name"] = type(train_ds).__name__
     
         # Save config stuff
-        A.save(train_transform, "checkpoints/" + checkpoint_name + "/train_transform.yaml", data_format="yaml")
-        A.save(val_transforms, "checkpoints/" + checkpoint_name + "/val_transform.yaml", data_format="yaml")
+    A.save(train_transform, "checkpoints/" + checkpoint_name + "/train_transform.yaml", data_format="yaml")
+    A.save(val_transforms, "checkpoints/" + checkpoint_name + "/val_transform.yaml", data_format="yaml")
 
-        with open("checkpoints/" + checkpoint_name + "/config.yml", 'w') as outfile:
-            yaml.dump(config, outfile, default_flow_style=False)
+    with open("checkpoints/" + checkpoint_name + "/config.yml", 'w') as outfile:
+        yaml.dump(config, outfile, default_flow_style=False)
 
     for epoch in range(config['num_epochs']):
         # Evaluate on Validation Set
@@ -143,9 +143,9 @@ def main():
                 threshold = config['eval_threshold'], 
                 log_wandb=LOG_WANDB)
 
-        if LOG_WANDB:
-            checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
-            torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
+    #if LOG_WANDB:
+        checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
+        torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
     
     if LOG_WANDB:
         generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
@@ -169,11 +169,20 @@ def train(train_loader, loss_func, model, optim, epoch, localizer, start_reg = 5
         
         loss = loss_func(pred_seg.float(), gt_seg.long())
 
-        if epoch >= start_reg:
+        if epoch > start_reg:
+            exit()
             segmentation = pred_seg.softmax(dim=1)
             segmentation_argmax = segmentation.argmax(dim=1)
             _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
-            loss += Losses.nnLoss([i for i in pred_keypoints], gt_keypoints, threshold)
+
+            if pred_keypoints is not None:
+                #pred_keypoints = [keypoints[~torch.isnan(keypoints).any(axis=1)] for keypoints in pred_keypoints]
+                add_loss = Losses.nnLoss(pred_keypoints, gt_keypoints[:, :, [1, 0]], threshold)
+                
+                if add_loss > 0:
+                    print(add_loss)
+
+                loss += add_loss
 
         loss.backward()
         optim.step()
