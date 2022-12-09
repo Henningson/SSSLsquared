@@ -17,8 +17,11 @@ class PolynomialLR:
         return {'total_iters': self._total_iters, 'power': self._power ,'last_epoch': self._last_epoch}
 
     def step(self):
-        self.last_epoch += 1
+        self._last_epoch += 1
 
-        self.optimizer.step()
+        self._optimizer.step()
         for g in self._optimizer.param_groups:
-            g['lr'] = self._base_lr * pow(1 - self.last_epoch/self._total_iters, self._power)
+            g['lr'] = self._base_lr * pow(1 - self._last_epoch/self._total_iters, self._power)
+
+    def zero_grad(self):
+        self._optimizer.zero_grad()

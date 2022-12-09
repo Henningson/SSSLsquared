@@ -159,7 +159,7 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
     for images, gt_seg, gt_keypoints in loop:
-        optim.zero_grad()
+        scheduler.zero_grad()
 
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
