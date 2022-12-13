@@ -1,0 +1,96 @@
+__version__: 1.3.0
+transform:
+  __class_fullname__: Compose
+  additional_targets: {}
+  bbox_params: null
+  keypoint_params:
+    angle_in_degrees: true
+    check_each_transform: true
+    format: xy
+    label_fields: null
+    remove_invisible: true
+  p: 1.0
+  transforms:
+  - __class_fullname__: Resize
+    always_apply: false
+    height: 512
+    interpolation: 1
+    p: 1
+    width: 256
+  - __class_fullname__: Affine
+    always_apply: false
+    cval: 0
+    cval_mask: 0
+    fit_output: false
+    interpolation: 1
+    keep_ratio: false
+    mask_interpolation: 0
+    mode: 0
+    p: 0.5
+    rotate:
+    - 0.0
+    - 0.0
+    scale:
+      x:
+      - 1.0
+      - 1.0
+      y:
+      - 1.0
+      - 1.0
+    shear:
+      x:
+      - 0.0
+      - 0.0
+      y:
+      - 0.0
+      - 0.0
+    translate_percent:
+      x:
+      - 0.15
+      - 0.15
+      y:
+      - 0.15
+      - 0.15
+    translate_px: null
+  - __class_fullname__: Rotate
+    always_apply: false
+    border_mode: 0
+    crop_border: false
+    interpolation: 1
+    limit:
+    - -40
+    - 40
+    mask_value: null
+    p: 0.5
+    rotate_method: largest_box
+    value: null
+  - __class_fullname__: HorizontalFlip
+    always_apply: false
+    p: 0.5
+  - __class_fullname__: VerticalFlip
+    always_apply: false
+    p: 0.5
+  - __class_fullname__: Perspective
+    always_apply: false
+    fit_output: false
+    interpolation: 1
+    keep_size: true
+    mask_pad_val: 0
+    p: 0.5
+    pad_mode: 0
+    pad_val: 0
+    scale:
+    - 0.05
+    - 0.2
+  - __class_fullname__: Normalize
+    always_apply: false
+    max_pixel_value: 255.0
+    mean:
+    - 0.0
+    p: 1.0
+    std:
+    - 1.0
+  - __class_fullname__: ToTensorV2
+    always_apply: true
+    p: 1.0
+    transpose_mask: false
