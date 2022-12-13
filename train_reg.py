@@ -25,8 +25,6 @@ from models.LSQ import LSQLocalization
 import sys
 sys.path.append("models/")
 
-
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 import wandb
@@ -37,46 +35,26 @@ def main():
                     description = 'What the program does',
                     epilog = 'Text at the bottom of help')
     parser.add_argument("-l", "--logwandb", action="store_true")
+    parser.add_argument("-c", "--checkpoint", type="str", default=None)
     
     args = parser.parse_args()
+    
     LOG_WANDB = args.logwandb
+    LOAD_FROM_CHECKPOINT = args.checkpoint is not None
+    CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
+    CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
 
-    config = utils.load_config("config.yml")
-    checkpoint_name = datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else "config.yml"
+    TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"
+    VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform.yaml"
 
-    #if LOG_WANDB:
-    os.mkdir("checkpoints/" + checkpoint_name)
+    config = utils.load_config(CONFIG_PATH)
 
-    train_transform = A.Compose(
-        [
-            A.Resize(height=config['image_height'], width=config['image_width']),
-            A.Affine(translate_percent = 0.15, p=0.5),
-            A.Rotate(limit=40, border_mode = cv2.BORDER_CONSTANT, p=0.5),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.Perspective(scale=(0.05, 0.2), p=0.5),
-            A.Normalize(
-                mean=[0.0],
-                std=[1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
-        ],
-        keypoint_params=A.KeypointParams(format='xy')
-    )
+    if not LOAD_FROM_CHECKPOINT:
+        os.mkdir(CHECKPOINT_PATH)
 
-    val_transforms = A.Compose(
-        [
-            A.Resize(height=config['image_height'], width=config['image_width']),
-            A.Normalize(
-                mean=[0.0],
-                std=[1.0],
-                max_pixel_value=255.0,
-            ),
-            ToTensorV2(),
-        ],
-        keypoint_params=A.KeypointParams(format='xy')
-    )
+    train_transform = A.load(TRAIN_TRANSFORM_PATH, data_format='yaml')
+    val_transforms = A.load(VAL_TRANSFORM_PATH, data_format='yaml')
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], features=config['features']).to(DEVICE)
@@ -92,21 +70,18 @@ def main():
 
         wandb.init(project="SSSLSquared", config=config)
         wandb.config["loss"] = type(loss).__name__
-        wandb.config["checkpoint_name"] = checkpoint_name
+        wandb.config["checkpoint_name"] = CHECKPOINT_NAME
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
 
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
-    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
+    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
     train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=val_transforms)
 
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
-
-    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
-    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
 
     localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
                                     gauss_window = config["gauss_window"], 
@@ -117,14 +92,11 @@ def main():
         wandb.watch(model)
         wandb.config["dataset_name"] = type(train_ds).__name__
     
-        # Save config stuff
-    A.save(train_transform, "checkpoints/" + checkpoint_name + "/train_transform.yaml", data_format="yaml")
-    A.save(val_transforms, "checkpoints/" + checkpoint_name + "/val_transform.yaml", data_format="yaml")
+    # Save config stuff
+    A.save(train_transform, CHECKPOINT_PATH + "/train_transform.yaml", data_format="yaml")
+    A.save(val_transforms, CHECKPOINT_PATH + "/val_transform.yaml", data_format="yaml")
 
-    with open("checkpoints/" + checkpoint_name + "/config.yml", 'w') as outfile:
-        yaml.dump(config, outfile, default_flow_style=False)
-
-    for epoch in range(config['num_epochs']):
+    for epoch in range(config['last_epoch'], config['num_epochs']):
         # Evaluate on Validation Set
         evaluate(val_loader, model, loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
@@ -136,20 +108,20 @@ def main():
         train(train_loader, 
                 loss, 
                 model, 
-                scheduler, 
+                scheduler,
                 epoch, 
                 localizer, 
                 use_regression=epoch > config['keypoint_regularization_at'],
                 keypoint_lambda=config['keypoint_lambda'], 
                 log_wandb=False)
 
-    #if LOG_WANDB:
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
-        torch.save(checkpoint, "checkpoints/" + checkpoint_name + "/model.pth.tar")
-    
-    if LOG_WANDB:
-        generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
-        generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
+        torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
+
+        config["learning_rate"] = 
+        config["last_epoch"] = epoch
+        with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
+            yaml.dump(config, outfile, default_flow_style=False)
 
     print("\033[92m" + "Training Done!")
 
@@ -185,12 +157,11 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
                 loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
 
         loss.backward()
-
-        # Scheduler invokes the optimizers step function
         scheduler.step()
 
         running_average += loss.item()
         loop.set_postfix(loss=loss.item())
+    scheduler.update_lr()
 
     if log_wandb:
         print("Logging wandb")
@@ -222,34 +193,6 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
             })}, step=epoch)
         return
 
-
-def generate_video(model, data_loader, path):
-    model.eval()
-    count = 0
-    video_list = []
-    
-    for images, gt_seg, _ in data_loader:
-        images = images.to(device=DEVICE)
-        gt_seg = gt_seg.to(device=DEVICE)
-
-        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
-
-        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True, do_not_open=True)
-        visualizer.draw_images(images)
-        visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
-
-        frame = visualizer.get_as_numpy_arr()
-        visualizer.close()
-
-        # CHANNELS x WIDTH x HEIGHT!!!
-        frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
-        video_list.append(frame)
-        count += images.shape[0]
-
-    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
-    for frame in video_list:
-        out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
-    out.release()
 
 if __name__ == "__main__":
     main()

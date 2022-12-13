@@ -22,6 +22,7 @@ import utils
 import Losses
 import evaluate
 import gc
+import train_reg
 from models.LSQ import LSQLocalization
 
 import sys
@@ -58,7 +59,7 @@ def main():
                             ).to(DEVICE)
 
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
-    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'])
+    scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
     train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=val_transforms)
@@ -67,8 +68,6 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     loss = nn.CrossEntropyLoss()
     for epoch in range(config['num_epochs']):
-
-    
         localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
                                 gauss_window = config["gauss_window"], 
                                 heatmapaxis = config["heatmapaxis"], 
@@ -76,7 +75,7 @@ def main():
 
         evaluate.evaluate(val_loader, model, loss, localizer=localizer, epoch=epoch)
 
-        train(train_loader, 
+        train_reg.train(train_loader, 
                 loss, 
                 model, 
                 scheduler, 
@@ -88,50 +87,6 @@ def main():
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, os.path.join(checkpoint_path, "model.pth.tar"))
-
-
-def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False):
-    model.train()
-    running_average = 0.0
-    loop = tqdm(train_loader, desc="TRAINING")
-    for images, gt_seg, gt_keypoints in loop:
-        optim.zero_grad()
-
-        images = images.to(device=DEVICE)
-        gt_seg = gt_seg.to(device=DEVICE)
-        gt_keypoints = gt_keypoints.to(device=DEVICE)
-
-        # forward
-        pred_seg = model(images)
-        
-        loss = loss_func(pred_seg.float(), gt_seg.long())
-
-        segmentation = pred_seg.softmax(dim=1)
-        segmentation_argmax = segmentation.argmax(dim=1)
- 
-        if use_regression:
-            try:
-                _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
-            except:
-                print("Matrix probably singular. Whoopsie.")
-                continue
-
-            if pred_keypoints is not None:
-                keypoint_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
-                loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
-
-        loss.backward()
-
-        # Scheduler invokes the optimizers step function
-        scheduler.step()
-
-        running_average += loss.item()
-        loop.set_postfix(loss=loss.item())
-
-    if log_wandb:
-        print("Logging wandb")
-        wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
-
 
 def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=2, log_wandb=False):
     if not log_wandb:

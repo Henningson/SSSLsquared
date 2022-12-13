@@ -52,7 +52,7 @@ def main():
     model = neuralNet.Model(in_channels=1, 
                             out_channels=config['num_classes'], 
                             features=config['features'], 
-                            state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))
+                            state_dict=torch.load(os.path.join(checkpoint_path, "model_test.pth.tar"))
                             ).to(DEVICE)
 
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], 

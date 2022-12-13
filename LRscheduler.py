@@ -1,7 +1,7 @@
 import torch
 
 class PolynomialLR:
-    def __init__(self, optimizer, total_iters=30, power=0.9, last_epoch = -1):
+    def __init__(self, optimizer, total_iters=30, power=0.9, last_epoch = 0):
         self._optimizer = optimizer
         self._total_iters = total_iters
         self._power = power
@@ -16,12 +16,16 @@ class PolynomialLR:
     def state_dict(self) -> dict:
         return {'total_iters': self._total_iters, 'power': self._power ,'last_epoch': self._last_epoch}
 
-    def step(self):
-        self._last_epoch += 1
+    def get_current_lr(self):
+        return self._base_lr * pow(1 - self._last_epoch/self._total_iters, self._power)
 
-        self._optimizer.step()
+    def update_lr(self):
         for g in self._optimizer.param_groups:
             g['lr'] = self._base_lr * pow(1 - self._last_epoch/self._total_iters, self._power)
+
+    def step(self):
+        self._optimizer.step()
+        self._last_epoch += 1
 
     def zero_grad(self):
         self._optimizer.zero_grad()

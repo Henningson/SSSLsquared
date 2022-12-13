@@ -66,7 +66,12 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             starter_lsq.record()
             segmentation = pred_seg.softmax(dim=1)
             segmentation_argmax = segmentation.argmax(dim=1)
-            _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+            try:
+                _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+            except:
+                print("Matrix probably singular. Whoopsie.")
+                continue
+            
             torch.cuda.synchronize()
             ender_lsq.record()
 
