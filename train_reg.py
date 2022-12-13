@@ -123,6 +123,9 @@ def main():
         with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
 
+    generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
+    generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
+
     print("\033[92m" + "Training Done!")
 
 
@@ -192,6 +195,35 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
                 }
             })}, step=epoch)
         return
+
+
+def generate_video(model, data_loader, path):
+    model.eval()
+    count = 0
+    video_list = []
+
+    for images, gt_seg, _ in data_loader:
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+
+        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
+
+        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True, do_not_open=True)
+        visualizer.draw_images(images)
+        visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
+
+        frame = visualizer.get_as_numpy_arr()
+        visualizer.close()
+
+        # CHANNELS x WIDTH x HEIGHT!!!
+        frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
+        video_list.append(frame)
+        count += images.shape[0]
+
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
+    for frame in video_list:
+        out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
+    out.release()
 
 
 if __name__ == "__main__":
