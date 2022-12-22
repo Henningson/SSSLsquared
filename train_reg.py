@@ -35,7 +35,7 @@ def main():
                     description = 'What the program does',
                     epilog = 'Text at the bottom of help')
     parser.add_argument("-l", "--logwandb", action="store_true")
-    parser.add_argument("-c", "--checkpoint", type="str", default=None)
+    parser.add_argument("-c", "--checkpoint", type=str, default=None)
     
     args = parser.parse_args()
     
@@ -79,7 +79,8 @@ def main():
 
     train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
     val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=val_transforms)
-
+    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
+    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
 
@@ -118,13 +119,12 @@ def main():
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
 
-        config["learning_rate"] = 
         config["last_epoch"] = epoch
         with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
 
-    generate_video(model, vid_loader_val, "checkpoints/" + checkpoint_name + "/val_video.mp4")
-    generate_video(model, vid_loader_train, "checkpoints/" + checkpoint_name + "/train_video.mp4")
+    generate_video(model, vid_loader_val, CHECKPOINT_PATH + "/val_video.mp4")
+    generate_video(model, vid_loader_train, CHECKPOINT_PATH + "/train_video.mp4")
 
     print("\033[92m" + "Training Done!")
 

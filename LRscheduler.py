@@ -22,10 +22,11 @@ class PolynomialLR:
     def update_lr(self):
         for g in self._optimizer.param_groups:
             g['lr'] = self._base_lr * pow(1 - self._last_epoch/self._total_iters, self._power)
+        
+        self._last_epoch += 1
 
     def step(self):
         self._optimizer.step()
-        self._last_epoch += 1
 
     def zero_grad(self):
         self._optimizer.zero_grad()
