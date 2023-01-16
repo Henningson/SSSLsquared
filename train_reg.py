@@ -135,18 +135,9 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
+    show = True
     for images, gt_seg, gt_keypoints in loop:
         scheduler.zero_grad()
-
-        #import matplotlib.pyplot as plt
-        #bla = Visualizer.Visualize2D(x=8)
-        #grid = torchvision.utils.make_grid(im)
-        #image = show(grid)
-        #a = 1
-        #bla.draw_images(images)
-        #bla.draw_points(gt_keypoints[:, :, [1, 0]])
-        #plt.show(block=True)
-
 
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
