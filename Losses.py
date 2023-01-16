@@ -1,8 +1,6 @@
 import torch
 import sys
-sys.path.append("ChamferDistancePytorch")
-import chamfer2D.dist_chamfer_2D
-import chamfer_python
+from chamferdist import ChamferDistance
 
 def findNearestNeighbour(point, target_points) -> int:
         if len(point.shape) == 1:
@@ -13,8 +11,7 @@ def findNearestNeighbour(point, target_points) -> int:
 
 def chamfer(prediction, gt):
     loss = 0.0
-
-    chamLoss = chamfer2D.dist_chamfer_2D.chamfer_2DDist()
+    chamLoss = ChamferDistance()
 
     for i, pred in enumerate(prediction):
         batch_pred = pred[~torch.isnan(pred).any(axis=1)]
@@ -26,9 +23,9 @@ def chamfer(prediction, gt):
         if batch_gt.nelement() == 0:
             continue
 
-        d1, d2, idx1, idx2 = chamLoss(batch_pred.unsqueeze(0), batch_gt[:, [1, 0]].unsqueeze(0))
+        dist = chamLoss(batch_pred.unsqueeze(0), batch_gt[:, [1, 0]].unsqueeze(0)).item()
         #loss += torch.mean(d1) + torch.mean(d2)
-        loss += (torch.mean(d1) + torch.mean(d2)) / (2*(d1.shape[1] + d1.shape[1]))
+        loss += dist
 
     return loss
 

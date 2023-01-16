@@ -130,7 +130,6 @@ def main():
 
     print("\033[92m" + "Training Done!")
 
-
 def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False, temporal_smoothing = False, heatmapaxis=3, temporal_lambda=0.01):
     print("________ EPOCH: {0} _______".format(epoch))
     model.train()
@@ -138,6 +137,16 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
     loop = tqdm(train_loader, desc="TRAINING")
     for images, gt_seg, gt_keypoints in loop:
         scheduler.zero_grad()
+
+        #import matplotlib.pyplot as plt
+        #bla = Visualizer.Visualize2D(x=8)
+        #grid = torchvision.utils.make_grid(im)
+        #image = show(grid)
+        #a = 1
+        #bla.draw_images(images)
+        #bla.draw_points(gt_keypoints[:, :, [1, 0]])
+        #plt.show(block=True)
+
 
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)

@@ -16,7 +16,7 @@ class HLEPlusPlus(Dataset):
         self.laserpoints_dirs = [os.path.join(base_path, key, "points2d/") for key in keys]
         self.vocalfold_mask_dirs = [os.path.join(base_path, key, "vf_mask/") for key in keys]
         
-        self.transform = A.ReplayCompose(transform)
+        self.transform = transform
         self.train_test_split = 0.9
         self.pad_keypoints = pad_keypoints
 
@@ -25,7 +25,6 @@ class HLEPlusPlus(Dataset):
         self.glottal_masks = self.make_list(self.glottal_mask_dirs)
         self.vocalfold_masks = self.make_list(self.vocalfold_mask_dirs)
         self.laserpoints = self.make_list(self.laserpoints_dirs)
-        self.replay = None
 
     def make_list(self, dirs):
         list = []
@@ -70,12 +69,7 @@ class HLEPlusPlus(Dataset):
         transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
 
         if self.transform is not None:
-            if index % self.batch_size == 0:
-                augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
-                self.replay = augmentations['replay']
-            else:
-                augmentations = A.ReplayCompose.replay(self.replay, image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
-            
+            augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
             
             image = augmentations["image"]
             seg = augmentations["masks"][0]
@@ -100,12 +94,10 @@ class SBHLEPlusPlus(HLEPlusPlus):
         self.do_shuffle = do_shuffle
         super().__init__(base_path, keys, pad_keypoints, transform)
 
+        self.transform = A.ReplayCompose(self.transform)
+        self.replay = None
         if do_shuffle:
-            self.images = self.shuffle(self.images, self.batch_size)
-            self.laserpoint_masks = self.shuffle(self.laserpoint_masks, self.batch_size)
-            self.glottal_masks = self.shuffle(self.glottal_masks, self.batch_size)
-            self.vocalfold_masks = self.shuffle(self.vocalfold_masks, self.batch_size)
-            self.laserpoints = self.shuffle(self.laserpoints, self.batch_size)
+            self.images, self.laserpoint_masks, self.glottal_masks, self.vocalfold_masks, self.laserpoints = self.shuffle([self.images, self.laserpoint_masks, self.glottal_masks, self.vocalfold_masks, self.laserpoints], self.batch_size)
 
     def reduce_list_to_fit_batchsize(self, list, batch_size):
         return list[:-(len(list) % batch_size)]
@@ -122,16 +114,90 @@ class SBHLEPlusPlus(HLEPlusPlus):
 
         return list
 
-    def shuffle(self, list_to_shuffle, batch_size):
-        assert len(list_to_shuffle) % batch_size == 0
-
-
+    def restructure_list(self, list_, batch_size):
         new_list = []
-        for i in range(len(list_to_shuffle) // batch_size):
-            new_list.append(list_to_shuffle[i*batch_size:(i+1)*batch_size])
+        for i in range(len(list_) // batch_size):
+            new_list.append(list_[i*batch_size:(i+1)*batch_size])
 
-        random.shuffle(new_list)
-        return [item for sublist in new_list for item in sublist]
+        return new_list
+
+    def shuffle(self, lists_to_shuffle, batch_size):
+        for list_ in lists_to_shuffle:
+            assert len(list_) % batch_size == 0
+
+        # Split every list into sublists of size batch size
+        # For example batch_size = 2: [0, 1, 2, 3] -> [[0, 1], [2, 3]]
+        restructured_lists = []
+        for list_ in lists_to_shuffle:
+            restructured_lists.append(self.restructure_list(list_, batch_size))
+
+        # Zip all given lists, and shuffle these such that all the indices stay the same
+        temp = list(zip(*restructured_lists))
+        random.shuffle(temp)
+        lists = list(zip(*temp))
+
+        # Remove the sublists and return the shuffled lists
+        reordered_lists = []
+        for single_list in lists:
+            recombined_list = []
+            for sub_list in single_list:
+                for item in sub_list:
+                    recombined_list.append(item)
+            reordered_lists.append(recombined_list)
+        return reordered_lists
+
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        mask_path = self.laserpoint_masks[index]
+        glottal_mask_path = self.glottal_masks[index]
+        vocalfold_mask_path = self.vocalfold_masks[index]
+        point2D_path = self.laserpoints[index]
+
+        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32)
+
+        laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        laserpoints[laserpoints == 255.0] = 1.0
+
+        glottal_mask = np.array(Image.open(glottal_mask_path).convert("L"), dtype=np.float32)
+        glottal_mask[glottal_mask == 255.0] = 2.0
+
+        vocalfold_mask = np.array(Image.open(vocalfold_mask_path).convert("L"), dtype=np.float32)
+        vocalfold_mask[vocalfold_mask == 255.0] = 3.0
+
+        keypoints = np.load(point2D_path)
+        keypoints[~(keypoints == 0).any(axis=1)]
+        
+        # Set class labels
+        seg = np.zeros(glottal_mask.shape, dtype=np.float32)
+        seg[vocalfold_mask == 3.0] = 2
+        seg[laserpoints == 1.0] = 3
+        seg[glottal_mask == 2.0] = 1
+
+        transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
+
+
+        if self.transform is not None:
+            if index % self.batch_size == 0:
+                augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
+                self.replay = augmentations['replay']
+            else:
+                augmentations = A.ReplayCompose.replay(self.replay, image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
+
+            image = augmentations["image"]
+            seg = augmentations["masks"][0]
+            transformed_vf_mask = augmentations["masks"][1]
+            keypoints = augmentations["keypoints"]
+
+        # Pad keypoints, such that tensor have all the same size
+        keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        if keypoints.nelement() != 0:
+            keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
+        to_pad = self.pad_keypoints - keypoints.shape[0]
+        keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
+        keypoints[(keypoints == 0.0)] = torch.nan
+
+        return image, seg, keypoints
 
 
 class HLEDataset(Dataset):
