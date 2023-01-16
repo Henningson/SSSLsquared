@@ -91,7 +91,7 @@ def main():
 
     if LOG_WANDB:
         wandb.watch(model)
-        wandb.config["dataset_name"] = type(train_ds).__name__
+        #wandb.config["dataset_name"] = type(train_ds).__name__
     
     # Save config stuff
     A.save(train_transform, CHECKPOINT_PATH + "/train_transform.yaml", data_format="yaml")
