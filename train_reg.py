@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import HLEPlusPlus
+from dataset import SBHLEPlusPlus
 from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
@@ -77,12 +77,12 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
-    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
-    val_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=val_transforms)
-    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
-    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=2, pin_memory=True, shuffle=False)
-    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=2, pin_memory=True, shuffle=True)
+    train_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), batch_size=config['batch_size'], pad_keypoints=config['pad_keypoints'], transform=train_transform)
+    val_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), batch_size=config['batch_size'], pad_keypoints=config['pad_keypoints'], transform=val_transforms)
+    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
 
     localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
                                     gauss_window = config["gauss_window"], 
@@ -112,9 +112,11 @@ def main():
                 scheduler,
                 epoch, 
                 localizer, 
-                use_regression=epoch > config['keypoint_regularization_at'],
+                use_regression=epoch > config['keypoint_regularization_at'] - 1,
                 keypoint_lambda=config['keypoint_lambda'], 
-                log_wandb=False)
+                log_wandb=False,
+                temporal_smoothing=epoch > config['temporal_regularization_at'] - 1,
+                temporal_lambda=config['temporal_lambda'])
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
@@ -129,7 +131,8 @@ def main():
     print("\033[92m" + "Training Done!")
 
 
-def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False):
+def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False, temporal_smoothing = False, heatmapaxis=3, temporal_lambda=0.01):
+    print("________ EPOCH: {0} _______".format(epoch))
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
@@ -158,6 +161,10 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
             if pred_keypoints is not None:
                 keypoint_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
                 loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
+
+        if temporal_smoothing:
+            loss += temporal_lambda * segmentation[:, heatmapaxis, :, :].var(dim=0).mean()
+
 
         loss.backward()
         scheduler.step()

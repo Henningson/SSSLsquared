@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 import numpy as np
 import torch
 import albumentations as A
+import random
 from albumentations.pytorch import ToTensorV2
 
 
@@ -15,7 +16,7 @@ class HLEPlusPlus(Dataset):
         self.laserpoints_dirs = [os.path.join(base_path, key, "points2d/") for key in keys]
         self.vocalfold_mask_dirs = [os.path.join(base_path, key, "vf_mask/") for key in keys]
         
-        self.transform = transform
+        self.transform = A.ReplayCompose(transform)
         self.train_test_split = 0.9
         self.pad_keypoints = pad_keypoints
 
@@ -24,6 +25,7 @@ class HLEPlusPlus(Dataset):
         self.glottal_masks = self.make_list(self.glottal_mask_dirs)
         self.vocalfold_masks = self.make_list(self.vocalfold_mask_dirs)
         self.laserpoints = self.make_list(self.laserpoints_dirs)
+        self.replay = None
 
     def make_list(self, dirs):
         list = []
@@ -68,7 +70,13 @@ class HLEPlusPlus(Dataset):
         transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
 
         if self.transform is not None:
-            augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
+            if index % self.batch_size == 0:
+                augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
+                self.replay = augmentations['replay']
+            else:
+                augmentations = A.ReplayCompose.replay(self.replay, image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
+            
+            
             image = augmentations["image"]
             seg = augmentations["masks"][0]
             transformed_vf_mask = augmentations["masks"][1]
@@ -83,6 +91,47 @@ class HLEPlusPlus(Dataset):
         keypoints[(keypoints == 0.0)] = torch.nan
 
         return image, seg, keypoints
+
+
+# HLEPlusPlus optimized for sequences of batch-size
+class SBHLEPlusPlus(HLEPlusPlus):
+    def __init__(self, base_path, keys, batch_size, do_shuffle=True, pad_keypoints = 200, transform=None):
+        self.batch_size = batch_size
+        self.do_shuffle = do_shuffle
+        super().__init__(base_path, keys, pad_keypoints, transform)
+
+        if do_shuffle:
+            self.images = self.shuffle(self.images, self.batch_size)
+            self.laserpoint_masks = self.shuffle(self.laserpoint_masks, self.batch_size)
+            self.glottal_masks = self.shuffle(self.glottal_masks, self.batch_size)
+            self.vocalfold_masks = self.shuffle(self.vocalfold_masks, self.batch_size)
+            self.laserpoints = self.shuffle(self.laserpoints, self.batch_size)
+
+    def reduce_list_to_fit_batchsize(self, list, batch_size):
+        return list[:-(len(list) % batch_size)]
+
+
+    def make_list(self, dirs):
+        list = []
+        for dir in dirs:
+            file_list = sorted(os.listdir(dir))
+            file_list = self.reduce_list_to_fit_batchsize(file_list, self.batch_size)
+
+            for file_path in file_list:
+                list.append(dir + file_path)
+
+        return list
+
+    def shuffle(self, list_to_shuffle, batch_size):
+        assert len(list_to_shuffle) % batch_size == 0
+
+
+        new_list = []
+        for i in range(len(list_to_shuffle) // batch_size):
+            new_list.append(list_to_shuffle[i*batch_size:(i+1)*batch_size])
+
+        random.shuffle(new_list)
+        return [item for sublist in new_list for item in sublist]
 
 
 class HLEDataset(Dataset):

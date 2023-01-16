@@ -90,6 +90,16 @@ transform:
     p: 1.0
     std:
     - 1.0
+  - __class_fullname__: RandomBrightnessContrast
+    always_apply: false
+    brightness_by_max: true
+    brightness_limit:
+    - -0.2
+    - 0.2
+    contrast_limit:
+    - -0.2
+    - 0.2
+    p: 0.5
   - __class_fullname__: ToTensorV2
     always_apply: true
     p: 1.0

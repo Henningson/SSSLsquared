@@ -72,7 +72,7 @@ def connCompTest():
 
 import albumentations as A
 import utils
-from dataset import HLEPlusPlus
+from dataset import HLEPlusPlus, SBHLEPlusPlus
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
 import torchvision
@@ -114,19 +114,27 @@ def testAugmentations():
                 std=[1.0],
                 max_pixel_value=255.0,
             ),
+            A.RandomBrightnessContrast(),
             ToTensorV2(),
         ],
         keypoint_params=A.KeypointParams(format='xy')
     )
 
-    train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
-    train_loader = DataLoader(train_ds, batch_size=8, num_workers=2, pin_memory=True, shuffle=True)
+    A.save(train_transform, "test.yaml", data_format="yaml")
+
+    batch_size = 8
+    train_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), batch_size=batch_size, pad_keypoints=config['pad_keypoints'], transform=train_transform)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=2, pin_memory=True, shuffle=False)
 
 
     for im, seg, key in train_loader:
+        print(im.max())
         grid = torchvision.utils.make_grid(im)
         image = show(grid)
         a = 1
+        plt.show(block=True)
+
+import random
 
 if __name__ == "__main__":
     testAugmentations()
