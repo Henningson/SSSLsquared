@@ -10,7 +10,6 @@ import viewer
 import torchmetrics
 import metrics
 import wandb
-from darktheme.widget_template import DarkPalette
 
 from PyQt5.QtWidgets import QApplication
 from tqdm import tqdm
