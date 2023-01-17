@@ -37,6 +37,7 @@ def main():
     parser.add_argument("-l", "--logwandb", action="store_true")
     parser.add_argument("-c", "--checkpoint", type=str, default=None)
     parser.add_argument("--dataset_path", type=str, default=None)
+    parser.add_argument("--batch_size", type=int, default=None)
     
     args = parser.parse_args()
     
@@ -53,6 +54,9 @@ def main():
     
     if args.dataset_path is not None:
         config['dataset_path'] = args.dataset_path
+
+    if args.batch_size is not None:
+        config['batch_size'] = args.batch_size
 
 
     if not LOAD_FROM_CHECKPOINT:
