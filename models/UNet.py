@@ -18,7 +18,7 @@ class DoubleConv(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, encoder, out_channels=3, features=[64, 128, 256, 512]):
+    def __init__(self, encoder, out_channels, features):
         super(Decoder, self).__init__()
         self.ups = nn.ModuleList()
         self.encoder = encoder
@@ -44,7 +44,7 @@ class Decoder(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channels=3, features=[64, 128, 256, 512]):
+    def __init__(self, in_channels, features):
         super(Encoder, self).__init__()
         self.downs = nn.ModuleList()
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -68,13 +68,16 @@ class Encoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, in_channels, out_channels, state_dict=None, features=[64, 128, 256, 512], device="cuda"):
+    def __init__(self, config={'in_channels': 1, 'out_channels': 3, 'features': [64, 128, 256, 512]}, state_dict=None, device="cuda"):
         super(Model, self).__init__()
+        in_channels = config['in_channels']
+        out_channels = config['out_channels']
+        features = config['features']
+
         self.bottleneck_size = features[-1]*2
 
         self.encoder = Encoder(in_channels, features)
         self.decoder = Decoder(self.encoder, out_channels, features)
-        #self.pointLocalizer = LocalizationModule(self.bottleneck_size, point_dims=point_dims, num_samplepoints=num_samplepoints)
         self.bottleneck = DoubleConv(features[-1], self.bottleneck_size)
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
 

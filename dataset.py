@@ -9,7 +9,11 @@ from albumentations.pytorch import ToTensorV2
 
 
 class HLEPlusPlus(Dataset):
-    def __init__(self, base_path, keys, pad_keypoints = 200, transform=None):
+    def __init__(self, config, is_train=True, transform=None):
+        base_path = config['dataset_path']
+        keys = config['train_keys'].split(",") if is_train else config['val_keys'].split(",")
+        pad_keypoints = config['pad_keypoints']
+
         self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
         self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
         self.glottal_mask_dirs = [os.path.join(base_path, key, "glottal_mask/") for key in keys]
@@ -89,10 +93,13 @@ class HLEPlusPlus(Dataset):
 
 # HLEPlusPlus optimized for sequences of batch-size
 class SBHLEPlusPlus(HLEPlusPlus):
-    def __init__(self, base_path, keys, batch_size, do_shuffle=True, pad_keypoints = 200, transform=None):
+    def __init__(self, config, is_train=True, transform=None):
+        batch_size = config['batch_size']
+        do_shuffle = config['shuffle_training']
+        
         self.batch_size = batch_size
         self.do_shuffle = do_shuffle
-        super().__init__(base_path, keys, pad_keypoints, transform)
+        super().__init__(config=config, is_train=is_train, transform=transform)
 
         self.transform = A.ReplayCompose(self.transform)
         self.replay = None
