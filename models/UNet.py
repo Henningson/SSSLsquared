@@ -70,8 +70,16 @@ class Encoder(nn.Module):
 class Model(nn.Module):
     def __init__(self, config={'in_channels': 1, 'out_channels': 3, 'features': [64, 128, 256, 512]}, state_dict=None, device="cuda"):
         super(Model, self).__init__()
-        in_channels = config['in_channels']
-        out_channels = config['out_channels']
+        try:
+            in_channels = config['in_channels']
+        except:
+            in_channels = 1
+
+        try: 
+            out_channels = config['out_channels']
+        except:
+            out_channels = 4
+            
         features = config['features']
 
         self.bottleneck_size = features[-1]*2

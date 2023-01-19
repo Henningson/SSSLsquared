@@ -145,9 +145,8 @@ def main():
                             ).to(DEVICE)
     loss = nn.CrossEntropyLoss()
 
-    val_ds = HLEPlusPlus(base_path=config['dataset_path'], 
-                         keys=config['val_keys'].split(","), 
-                         transform=val_transforms)
+    dataset = __import__('dataset').__dict__[config['dataset_name']]
+    val_ds = dataset(config, is_train=False, transform=val_transforms)
 
     val_loader = DataLoader(val_ds, 
                             batch_size=config['batch_size'], 

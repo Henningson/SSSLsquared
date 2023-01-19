@@ -95,7 +95,7 @@ class HLEPlusPlus(Dataset):
 class SBHLEPlusPlus(HLEPlusPlus):
     def __init__(self, config, is_train=True, transform=None):
         batch_size = config['batch_size']
-        do_shuffle = config['shuffle_training']
+        do_shuffle = is_train
         
         self.batch_size = batch_size
         self.do_shuffle = do_shuffle

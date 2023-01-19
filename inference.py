@@ -37,31 +37,30 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2022-12-06-13:34:51/")
-    
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-19-14:22:05/")
+    parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
+
     args = parser.parse_args()
+
     checkpoint_path = args.checkpoint
+
 
     if checkpoint_path == "" or not os.path.isdir(checkpoint_path):
         print("\033[93m" + "Please provide a viable checkpoint path")
 
     config = utils.load_config(os.path.join(checkpoint_path, "config.yml"))
+    config['dataset_path'] = args.dataset_path
+
     val_transforms = A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(in_channels=1, 
-                            out_channels=config['num_classes'], 
-                            features=config['features'], 
-                            state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))
-                            ).to(DEVICE)
-
-    val_ds = HLEPlusPlus(base_path=config['dataset_path'], 
-                         keys=config['val_keys'].split(","), 
-                         transform=val_transforms)
+    model = neuralNet.Model(config, state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))).to(DEVICE)
+    dataset = __import__('dataset').__dict__[config['dataset_name']]
+    val_ds = dataset(config, is_train=False, transform=val_transforms)
 
     val_loader = DataLoader(val_ds, 
                             batch_size=config['batch_size'], 
-                            num_workers=4, 
+                            num_workers=2, 
                             pin_memory=True, 
                             shuffle=False)
     
@@ -99,6 +98,10 @@ def main():
         for i in range(images.shape[0]):
             cleaned_keypoints = keypoints[i][~torch.isnan(keypoints[i]).any(axis=1)]
             gt_points.append(cleaned_keypoints[:, [1, 0]] - 1)
+
+        if means is None:
+            perFramePoints.append(np.zeros([0,2]))
+            continue
 
         for mean in means:
             mean = mean.cpu().detach().numpy()
