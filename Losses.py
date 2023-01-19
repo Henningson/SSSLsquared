@@ -1,5 +1,6 @@
 import torch
 import sys
+import math
 from chamferdist import ChamferDistance
 
 def findNearestNeighbour(point, target_points) -> int:
@@ -23,7 +24,7 @@ def chamfer(prediction, gt):
         if batch_gt.nelement() == 0:
             continue
 
-        dist = chamLoss(batch_pred.unsqueeze(0), batch_gt[:, [1, 0]].unsqueeze(0)).item()
+        dist = chamLoss(batch_pred.unsqueeze(0), batch_gt[:, [1, 0]].unsqueeze(0)).item() / math.sqrt(512*256)
         #loss += torch.mean(d1) + torch.mean(d2)
         loss += dist
 
