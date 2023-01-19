@@ -68,7 +68,7 @@ class Encoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, config={'in_channels': 1, 'out_channels': 3, 'features': [64, 128, 256, 512]}, state_dict=None, device="cuda"):
+    def __init__(self, config={'in_channels': 1, 'out_channels': 4, 'features': [64, 128, 256, 512], 'batch_size': 4}, state_dict=None, device="cuda"):
         super(Model, self).__init__()
         try:
             in_channels = config['in_channels']
@@ -81,12 +81,16 @@ class Model(nn.Module):
             out_channels = 4
             
         features = config['features']
+        batch_size = config['batch_size']
 
         self.bottleneck_size = features[-1]*2
 
         self.encoder = Encoder(in_channels, features)
         self.decoder = Decoder(self.encoder, out_channels, features)
         self.bottleneck = DoubleConv(features[-1], self.bottleneck_size)
+        self.depth_conv = nn.Sequential(nn.Conv3d(batch_size, batch_size, kernel_size=3, padding=1, stride=1),
+                            nn.BatchNorm3d(batch_size),
+                            nn.ReLU())
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
 
         if state_dict:
@@ -95,18 +99,21 @@ class Model(nn.Module):
     def get_statedict(self):
         return {"Encoder": self.encoder.state_dict(),
                 "Bottleneck": self.bottleneck.state_dict(),
+                "DepthConv": self.depth_conv.state_dict(),
                 "Decoder": self.decoder.state_dict(),
                 "LastConv": self.final_conv.state_dict()}
 
     def load_from_dict(self, dict):
         self.encoder.load_state_dict(dict["Encoder"])
         self.bottleneck.load_state_dict(dict["Bottleneck"])
+        self.depth_conv.load_state_dict(dict["DepthConv"])
         self.decoder.load_state_dict(dict["Decoder"])
         self.final_conv.load_state_dict(dict["LastConv"])
 
     def forward(self, x):
         x = self.encoder(x)
         x = self.bottleneck(x)
+        x = self.depth_conv(x.unsqueeze(0))[0]
         x = self.decoder(x)
 
         return self.final_conv(x)
@@ -114,11 +121,11 @@ class Model(nn.Module):
 
 def test():
 
-    x = torch.randn((4, 3, 512, 256))
-    y = torch.randn((4, 2, 100))
-    model = Model(in_channels=3, out_channels=3)
+    batch_size = 4
+    x = torch.randn((batch_size, 3, 512, 256))
+    y = torch.randn((batch_size, 2, 100))
+    model = Model(in_channels=3, out_channels=3, batch_size=batch_size)
     seg = model(x)
-
     print(type(model).__name__)
     #print(points.shape)
 

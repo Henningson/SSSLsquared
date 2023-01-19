@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from dataset import SBHLEPlusPlus
+#from dataset import SBHLEPlusPlus
 from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
@@ -34,10 +34,10 @@ def main():
                     prog = 'Train a Deep Neural Network for Semantic Segmentation with point based reg',
                     description = 'What the program does',
                     epilog = 'Text at the bottom of help')
-    parser.add_argument("-l", "--logwandb", action="store_true")
-    parser.add_argument("-c", "--checkpoint", type=str, default=None)
+    parser.add_argument("--logwandb", action="store_true")
+    parser.add_argument("--config", type=str, default="config.yml")
+    parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--dataset_path", type=str, default=None)
-    parser.add_argument("--batch_size", type=int, default=None)
     
     args = parser.parse_args()
     
@@ -46,7 +46,8 @@ def main():
     CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
 
-    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else "config.yml"
+
+    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config
     TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"
     VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform.yaml"
 
@@ -66,7 +67,7 @@ def main():
     val_transforms = A.load(VAL_TRANSFORM_PATH, data_format='yaml')
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], features=config['features']).to(DEVICE)
+    model = neuralNet.Model(config=config).to(DEVICE)
     loss = nn.CrossEntropyLoss()
 
     if LOG_WANDB:
@@ -86,10 +87,10 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate'])
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
-    train_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), batch_size=config['batch_size'], pad_keypoints=config['pad_keypoints'], transform=train_transform)
-    val_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['val_keys'].split(","), batch_size=config['batch_size'], pad_keypoints=config['pad_keypoints'], transform=val_transforms)
-    vid_loader_val = DataLoader(val_ds, batch_size=1, num_workers=config['num_workers'], pin_memory=True, shuffle=False)
-    vid_loader_train = DataLoader(train_ds, batch_size=1, num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+
+    dataset = __import__('dataset').__dict__[config['dataset_name']]
+    train_ds = dataset(config=config, is_train=True, transform=train_transform)
+    val_ds = dataset(config=config, is_train=False, transform=val_transforms)
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
 
@@ -100,7 +101,6 @@ def main():
 
     if LOG_WANDB:
         wandb.watch(model)
-        #wandb.config["dataset_name"] = type(train_ds).__name__
     
     # Save config stuff
     A.save(train_transform, CHECKPOINT_PATH + "/train_transform.yaml", data_format="yaml")
@@ -133,9 +133,6 @@ def main():
         config["last_epoch"] = epoch
         with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
-
-    generate_video(model, vid_loader_val, CHECKPOINT_PATH + "/val_video.mp4")
-    generate_video(model, vid_loader_train, CHECKPOINT_PATH + "/train_video.mp4")
 
     print("\033[92m" + "Training Done!")
 
