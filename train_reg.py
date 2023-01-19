@@ -57,7 +57,7 @@ def main():
     val_transforms = A.load(VAL_TRANSFORM_PATH, data_format='yaml')
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], features=config['features']).to(DEVICE)
+    model = neuralNet.Model(in_channels=1, out_channels=config['num_classes'], batch_size=config['batch_size'], features=config['features']).to(DEVICE)
     loss = nn.CrossEntropyLoss()
 
     if LOG_WANDB:
