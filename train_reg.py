@@ -56,10 +56,6 @@ def main():
     if args.dataset_path is not None:
         config['dataset_path'] = args.dataset_path
 
-    if args.batch_size is not None:
-        config['batch_size'] = args.batch_size
-
-
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
 
