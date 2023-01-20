@@ -54,7 +54,7 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
         dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
-        loss = loss_func(pred_seg.detach().cpu(), gt_seg).item()
+        loss = loss_func.cpu()(pred_seg.detach().cpu(), gt_seg).item()
 
         curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
         inference_time += curr_time_cnn

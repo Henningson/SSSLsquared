@@ -60,7 +60,8 @@ def main():
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config).to(DEVICE)
-    loss = nn.CrossEntropyLoss()
+    loss = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 219.35356979309054, 20.548104356520227, 178.53015836643837], dtype=torch.float32, device=DEVICE))
+    cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 219.35356979309054, 20.548104356520227, 178.53015836643837], dtype=torch.float32, device="cpu"))
 
     if LOG_WANDB:
         repo = pygit2.Repository('.')
@@ -100,7 +101,7 @@ def main():
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Evaluate on Validation Set
-        evaluate(val_loader, model, loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
+        evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
         visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)

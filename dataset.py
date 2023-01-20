@@ -107,7 +107,10 @@ class SBHLEPlusPlus(HLEPlusPlus):
             self.images, self.laserpoint_masks, self.glottal_masks, self.vocalfold_masks, self.laserpoints = self.shuffle([self.images, self.laserpoint_masks, self.glottal_masks, self.vocalfold_masks, self.laserpoints], self.batch_size)
 
     def reduce_list_to_fit_batchsize(self, list, batch_size):
-        return list[:-(len(list) % batch_size)]
+        if len(list) % batch_size != 0:
+            return list[:-(len(list) % batch_size)]
+        
+        return list
 
 
     def make_list(self, dirs):
@@ -361,7 +364,6 @@ class VideoDataset(Dataset):
         return image
 
 
-
 class ReinhardDataset(Dataset):
     def __init__(self, base_path, transform=None, is_train=True, train_test_split=0.9):
         self.image_dir = os.path.join(base_path, "png/")
@@ -405,3 +407,38 @@ class ReinhardDataset(Dataset):
         x[mask == 1.0] = 1
 
         return image, x
+
+if __name__ == "__main__":
+    from tqdm import tqdm
+    from torch.utils.data import DataLoader
+
+    config = {
+        'dataset_path': '../HLEDataset/dataset/',
+        'batch_size': 6,
+        'train_keys': "CF,CM,DD,FH,LS,RH,SS,TM",
+        'val_keys': "MK,MS",
+        'pad_keypoints': 200
+        }
+    val_transforms = A.load("val_transform.yaml", data_format='yaml')
+
+    dataset = SBHLEPlusPlus(config, is_train=True, transform=val_transforms)
+    val_loader = DataLoader(dataset, 
+                            batch_size=config['batch_size'],
+                            num_workers=2, 
+                            pin_memory=True, 
+                            shuffle=False)
+
+    
+    seg_list = []
+    for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
+        seg_list.append(gt_seg.detach().cpu().numpy())
+
+    segs = np.concatenate(seg_list, axis=0).astype(np.uint8)
+    num_classes = 4
+    elements_of_classes = []
+    for i in range(num_classes):
+        elements_of_classes.append(np.count_nonzero(segs == i))
+
+    weights = []
+    for i in range(num_classes):
+        weights.append(max(elements_of_classes) / elements_of_classes[i])

@@ -13,11 +13,12 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from dataset import HLEPlusPlus
 from models.LSQ import LSQLocalization
+import Visualizer
 
 import sys
 sys.path.append("models/")
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 
 
 def class_to_color(prediction, class_colors):
@@ -37,7 +38,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-19-14:22:05/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-19-16:42:24/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -59,7 +60,7 @@ def main():
     val_ds = dataset(config, is_train=False, transform=val_transforms)
 
     val_loader = DataLoader(val_ds, 
-                            batch_size=config['batch_size'], 
+                            batch_size=config['batch_size'],
                             num_workers=2, 
                             pin_memory=True, 
                             shuffle=False)
@@ -67,7 +68,8 @@ def main():
     localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
                                 gauss_window = config["gauss_window"], 
                                 heatmapaxis = config["heatmapaxis"], 
-                                threshold = config["threshold"])
+                                threshold = config["threshold"],
+                                device=DEVICE)
 
     video = []
 
@@ -84,6 +86,12 @@ def main():
         gt_seg = gt_seg.to(device=DEVICE)
 
         prediction = model(images).softmax(dim=1)
+
+        #import matplotlib.pyplot as plt
+        #bla = Visualizer.Visualize2D(x=6)
+        #bla.draw_heatmap(prediction, heatmapaxis=2)
+        #plt.show(block=True)
+
         segmentation = prediction.argmax(dim=1)
 
         _, means, _ = localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
