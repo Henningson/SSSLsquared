@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--logwandb", action="store_true")
     parser.add_argument("--config", type=str, default="config.yml")
     parser.add_argument("--checkpoint", type=str, default=None)
+    parser.add_argument("--dataset_path", type=str, default=None)
     
     args = parser.parse_args()
     
@@ -51,6 +52,9 @@ def main():
     VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform.yaml"
 
     config = utils.load_config(CONFIG_PATH)
+    
+    if args.dataset_path is not None:
+        config['dataset_path'] = args.dataset_path
 
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
