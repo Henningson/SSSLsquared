@@ -1,0 +1,29 @@
+program: train_reg.py
+method: random
+metric:
+  name: Eval Loss
+  goal: minimize
+parameters:
+  learning_rate:
+    min: 0.0001
+    max: 0.1
+  batch_size:
+    values: [4, 6]
+  model_depth:
+    values: [0, 1, 2]
+  kernel3d_size:
+    values: [3, 5]
+  num_epochs: 
+    values: [30, 50, 75, 100]
+  temporal_regularization_at: 
+    values: [10, 25, 50, 1000]
+  temporal_lambda: 
+    min: 0.0001
+    max: 0.1
+  keypoint_regularization_at:
+    values: [10, 25, 50, 1000]
+  keypoint_lambda:
+    min: 0.0001
+    max: 0.1
+  optimizer:
+    values: ["adam", "sgd"]

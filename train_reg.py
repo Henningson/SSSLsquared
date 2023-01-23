@@ -1,43 +1,54 @@
 import torch
 import albumentations as A
-from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-#from dataset import SBHLEPlusPlus
 from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
 import yaml
-from pathlib import Path
 from evaluate import evaluate
 import os
 import argparse
 import pygit2
 import Visualizer
-import numpy as np
 import cv2
 import utils
 import Losses
+import ConfigArgsParser
 from models.LSQ import LSQLocalization
-
 import sys
 sys.path.append("models/")
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 import wandb
 
 def main():
     parser = argparse.ArgumentParser(
-                    prog = 'Train a Deep Neural Network for Semantic Segmentation with point based reg',
-                    description = 'What the program does',
-                    epilog = 'Text at the bottom of help')
-    parser.add_argument("--logwandb", action="store_true")
+                    prog = 'Keypoint Regularized Training for Semantic Segmentation',
+                    description = 'Train a Segmentation Network that is optimized for simultaneously outputting keypoints',
+                    epilog = 'Arguments can be used to overwrite values in a config file.')
     parser.add_argument("--config", type=str, default="config.yml")
-    parser.add_argument("--checkpoint", type=str, default=None)
-    parser.add_argument("--dataset_path", type=str, default=None)
+    parser.add_argument("--optimizer", type=str)
+    parser.add_argument("--checkpoint", type=str)
+    parser.add_argument("--logwandb", action="store_true")
+    parser.add_argument("--model_depth", type=int)
+
+    parser.add_argument("--dataset_name", type=str)
+    parser.add_argument("--dataset_path", type=str)
+
+    parser.add_argument("--model", type=str)
+    parser.add_argument("--learning_rate", type=float)
+    parser.add_argument("--batch_size", type=int)
+    parser.add_argument("--features", type=int, nargs="+")
+    parser.add_argument("--kernel3d_size", type=int)
+    parser.add_argument("--num_epochs", type=int)
+    parser.add_argument("--loss_weights", type=float, nargs="+")
+    parser.add_argument("--temporal_regularization_at", type=int)
+    parser.add_argument("--temporal_lambda", type=float)
+    parser.add_argument("--keypoint_regularization_at", type=int)
+    parser.add_argument("--nn_threshold", type=float)
+    parser.add_argument("--keypoint_lambda", type=float)
     
     args = parser.parse_args()
     
@@ -51,10 +62,18 @@ def main():
     TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"
     VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform.yaml"
 
-    config = utils.load_config(CONFIG_PATH)
+    config = ConfigArgsParser.ConfigArgsParser(utils.load_config(CONFIG_PATH), args)
     
-    if args.dataset_path is not None:
-        config['dataset_path'] = args.dataset_path
+    # Gotta check this manually as sweeps do not allow nested lists
+    if args.model_depth is not None:
+        if args.model_depth == 0:
+            config["features"] = [32, 64, 128, 256]
+        elif args.model_depth == 1:
+            config["features"] = [32, 64, 128, 256, 512]
+        elif args.model_depth == 2:
+            config["features"] = [32, 64, 128, 256, 512, 1024]
+
+    config.printDifferences(utils.load_config(CONFIG_PATH))
 
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
@@ -64,8 +83,8 @@ def main():
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config).to(DEVICE)
-    loss = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32, device=DEVICE))
-    cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0, 1.0, 1.0], dtype=torch.float32, device="cpu"))
+    loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
+    cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device="cpu"))
 
     if LOG_WANDB:
         repo = pygit2.Repository('.')
@@ -81,7 +100,8 @@ def main():
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
 
-    optimizer = optim.SGD(model.parameters(), lr=config['learning_rate'])
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config.optimizer == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
+
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
 
