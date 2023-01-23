@@ -73,8 +73,6 @@ def main():
         elif args.model_depth == 2:
             config["features"] = [32, 64, 128, 256, 512, 1024]
 
-    config.printDifferences(utils.load_config(CONFIG_PATH))
-
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
 
@@ -99,6 +97,9 @@ def main():
         wandb.config["checkpoint_name"] = CHECKPOINT_NAME
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
+
+    
+    config.printDifferences(utils.load_config(CONFIG_PATH))
 
     optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config['optimizer'] == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
 
