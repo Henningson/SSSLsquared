@@ -52,7 +52,7 @@ def main():
     
     args = parser.parse_args()
     
-    LOG_WANDB = args.logwandb
+    LOG_WANDB = True
     LOAD_FROM_CHECKPOINT = args.checkpoint is not None
     CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
