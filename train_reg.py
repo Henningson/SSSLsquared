@@ -100,7 +100,7 @@ def main():
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
 
-    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config.optimizer == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config['optimizer'] == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
 
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 
