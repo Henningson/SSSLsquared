@@ -52,7 +52,7 @@ def main():
     
     args = parser.parse_args()
     
-    LOG_WANDB = args.logwandb
+    LOG_WANDB = True
     LOAD_FROM_CHECKPOINT = args.checkpoint is not None
     CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
@@ -72,8 +72,6 @@ def main():
             config["features"] = [32, 64, 128, 256, 512]
         elif args.model_depth == 2:
             config["features"] = [32, 64, 128, 256, 512, 1024]
-
-    config.printDifferences(utils.load_config(CONFIG_PATH))
 
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
@@ -100,7 +98,10 @@ def main():
         wandb.config["train_transform"] = A.to_dict(train_transform)
         wandb.config["validation_transform"] = A.to_dict(val_transforms)
 
-    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config.optimizer == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
+    
+    config.printDifferences(utils.load_config(CONFIG_PATH))
+
+    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config['optimizer'] == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
 
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 

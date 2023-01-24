@@ -17,14 +17,14 @@ parameters:
   kernel3d_size:
     values: [3, 5]
   num_epochs: 
-    values: [30, 50, 75, 100]
+    values: [30, 50]
   temporal_regularization_at: 
-    values: [10, 25, 50, 1000]
+    values: [10, 25, 40, 1000]
   temporal_lambda: 
     min: 0.0001
     max: 0.1
   keypoint_regularization_at:
-    values: [10, 25, 50, 1000]
+    values: [10, 25, 40, 1000]
   keypoint_lambda:
     min: 0.0001
     max: 0.1
