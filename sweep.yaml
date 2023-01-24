@@ -3,6 +3,9 @@ method: random
 metric:
   name: Eval Loss
   goal: minimize
+early_terminate:
+  type: hyperband
+  min_iter: 7
 parameters:
   learning_rate:
     min: 0.0001
