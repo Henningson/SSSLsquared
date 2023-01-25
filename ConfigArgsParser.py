@@ -1,5 +1,6 @@
 import utils
 import argparse
+from printer import Printer
 
 class ConfigArgsParser(dict):
     def __init__(self, config, argparser, *arg, **kw):
@@ -7,7 +8,6 @@ class ConfigArgsParser(dict):
         # We assume config to be a dict
         # First copy it
         for key, value in config.items():
-            print(key, value)
             self[key] = value
 
         # Next, match every key and value in argparser and overwrite it, if it exists
@@ -18,18 +18,18 @@ class ConfigArgsParser(dict):
             if key in config:
                 self[key] = value
             else:
-                print("\033[93mWarning: Key {0} does not exist in config.\033[0m".format(key))
+                Printer.Warning("Key {0} does not exist in config.".format(key))
 
     def printFormatted(self):
         for key, value in self.items():
-            print("\033[96m{0}: \033[92m{1}\033[0m".format(key, value))
+           Printer.KV(key, value)
 
     def printDifferences(self, config):
         for key, value in self.items():
             if config[key] != value:
-                print("\033[96m{0}: \033[94m{1}\033[0m".format(key, value))
+                Printer.KV(key, value)
             else:
-                print("\033[96m{0}: \033[92m{1}\033[0m".format(key, value))
+                Printer.KV2(key, value)
 
 if __name__ == "__main__":
 

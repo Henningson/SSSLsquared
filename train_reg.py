@@ -8,6 +8,7 @@ import LRscheduler
 import datetime
 import yaml
 from evaluate import evaluate
+from printer import Printer
 import os
 import argparse
 import pygit2
@@ -89,7 +90,7 @@ def main():
         num_uncommitted_files = repo.diff().stats.files_changed
 
         if num_uncommitted_files > 0:
-            print("\033[93m" + "Uncommited changes! Please commit before training.")
+            Printer.Warning("Uncommited changes! Please commit before training.")
             exit()
 
         wandb.init(project="SSSLSquared", config=config)
@@ -152,10 +153,10 @@ def main():
         with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
             yaml.dump(config, outfile, default_flow_style=False)
 
-    print("\033[92m" + "Training Done!")
+    Printer.OKG("Training Done!")
 
 def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False, temporal_smoothing = False, heatmapaxis=3, temporal_lambda=0.01):
-    print("________ EPOCH: {0} _______".format(epoch))
+    Printer.Header("EPOCH: {0}".format(epoch))
     model.train()
     running_average = 0.0
     loop = tqdm(train_loader, desc="TRAINING")
@@ -179,7 +180,7 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
             try:
                 _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
             except:
-                print("Matrix probably singular. Whoopsie.")
+                Printer.Warning("Matrix probably singular. Whoopsie.")
                 continue
 
             if pred_keypoints is not None:

@@ -106,9 +106,13 @@ class Model(nn.Module):
     def load_from_dict(self, dict):
         self.encoder.load_state_dict(dict["Encoder"])
         self.bottleneck.load_state_dict(dict["Bottleneck"])
-        self.depth_conv.load_state_dict(dict["DepthConv"])
         self.decoder.load_state_dict(dict["Decoder"])
         self.final_conv.load_state_dict(dict["LastConv"])
+
+        try:
+            self.depth_conv.load_state_dict(dict["DepthConv"])
+        except:
+            print("3D Depth Convolution not initialized.")
 
     def forward(self, x):
         x = self.encoder(x)
