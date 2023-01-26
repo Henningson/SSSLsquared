@@ -219,7 +219,7 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
 
         for i in range(num_log):
             wandb.log(
-            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().numpy(), masks={
+            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().moveaxis(0, -1).numpy(), masks={
                 "predictions" : {
                     "mask_data" : pred_seg[i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
