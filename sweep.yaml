@@ -1,4 +1,4 @@
-program: train_reg.py --logwandb --pretrain
+program: train_reg.py
 method: random
 metric:
   name: Eval Loss
@@ -30,3 +30,10 @@ parameters:
     max: 0.1
   optimizer:
     values: ["adam", "sgd"]
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - "--pretrain"
+  - "--logwandb"
+  - ${args}
