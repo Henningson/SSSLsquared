@@ -102,7 +102,8 @@ def testAugmentations():
     config = utils.load_config("config.yml")
 
     train_transform = A.Compose(
-        [
+        [   
+            A.RandomGamma(),
             A.Resize(height=config['image_height'], width=config['image_width']),
             A.Affine(translate_percent = 0.15, p=0.5),
             A.Rotate(limit=40, border_mode = cv2.BORDER_CONSTANT, p=0.5),
@@ -110,21 +111,20 @@ def testAugmentations():
             A.VerticalFlip(p=0.5),
             A.Perspective(scale=(0.05, 0.2), p=0.5),
             A.Normalize(
-                mean=[0.0],
-                std=[1.0],
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
                 max_pixel_value=255.0,
             ),
-            A.RandomBrightnessContrast(),
             ToTensorV2(),
         ],
         keypoint_params=A.KeypointParams(format='xy')
     )
 
-    #A.save(train_transform, "test.yaml", data_format="yaml")
+    A.save(train_transform, "test.yaml", data_format="yaml")
 
     batch_size = 8
     #train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
-    train_ds = SBHLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), batch_size=batch_size, pad_keypoints=config['pad_keypoints'], transform=train_transform)
+    train_ds = SBHLEPlusPlus(config, transform=train_transform)
     train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=2, pin_memory=True, shuffle=False)
 
     import Visualizer

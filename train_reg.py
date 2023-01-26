@@ -30,9 +30,11 @@ def main():
                     description = 'Train a Segmentation Network that is optimized for simultaneously outputting keypoints',
                     epilog = 'Arguments can be used to overwrite values in a config file.')
     parser.add_argument("--config", type=str, default="config.yml")
+    parser.add_argument("--logwandb", action="store_true")
+    parser.add_argument("--pretrain", action="store_true")
+
     parser.add_argument("--optimizer", type=str)
     parser.add_argument("--checkpoint", type=str)
-    parser.add_argument("--logwandb", action="store_true")
     parser.add_argument("--model_depth", type=int)
 
     parser.add_argument("--dataset_name", type=str)
@@ -53,7 +55,7 @@ def main():
     
     args = parser.parse_args()
     
-    LOG_WANDB = True
+    LOG_WANDB = args.logwandb
     LOAD_FROM_CHECKPOINT = args.checkpoint is not None
     CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
@@ -68,11 +70,11 @@ def main():
     # Gotta check this manually as sweeps do not allow nested lists
     if args.model_depth is not None:
         if args.model_depth == 0:
-            config["features"] = [32, 64, 128, 256]
+            config["features"] = [64, 128, 256]
         elif args.model_depth == 1:
-            config["features"] = [32, 64, 128, 256, 512]
+            config["features"] = [64, 128, 256, 512]
         elif args.model_depth == 2:
-            config["features"] = [32, 64, 128, 256, 512, 1024]
+            config["features"] = [64, 128, 256, 512, 1024]
 
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
@@ -81,7 +83,7 @@ def main():
     val_transforms = A.load(VAL_TRANSFORM_PATH, data_format='yaml')
 
     neuralNet = __import__(config["model"])
-    model = neuralNet.Model(config=config).to(DEVICE)
+    model = neuralNet.Model(config=config, state_dict=torch.load(os.path.join("pretrained", str(config["features"]) + ".pth.tar")) if args.pretrain else None, pretrain=True).to(DEVICE)
     loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
     cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device="cpu"))
 
@@ -102,7 +104,8 @@ def main():
     
     config.printDifferences(utils.load_config(CONFIG_PATH))
 
-    optimizer = optim.Adam(model.parameters(), lr=config['learning_rate']) if config['optimizer'] == "adam" else optim.SGD(model.parameters(), lr=config['learning_rate'])
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = optim.Adam(parameters, lr=config['learning_rate']) if config['optimizer'] == "adam" else optim.SGD(parameters, lr=config['learning_rate'])
 
     scheduler = LRscheduler.PolynomialLR(optimizer, config['num_epochs'], last_epoch=config['last_epoch'])
 

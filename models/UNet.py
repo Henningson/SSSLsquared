@@ -68,12 +68,12 @@ class Encoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, config={'in_channels': 1, 'out_channels': 3, 'features': [64, 128, 256, 512]}, state_dict=None, device="cuda"):
+    def __init__(self, config={'in_channels': 3, 'out_channels': 3, 'features': [64, 128, 256, 512]}, state_dict=None, pretrain=False, device="cuda"):
         super(Model, self).__init__()
         try:
             in_channels = config['in_channels']
         except:
-            in_channels = 1
+            in_channels = 3
 
         try: 
             out_channels = config['out_channels']
@@ -92,6 +92,9 @@ class Model(nn.Module):
         if state_dict:
             self.load_from_dict(state_dict)
 
+        if pretrain:
+            self.encoder.requires_grad_ = False
+
     def get_statedict(self):
         return {"Encoder": self.encoder.state_dict(),
                 "Bottleneck": self.bottleneck.state_dict(),
@@ -102,7 +105,11 @@ class Model(nn.Module):
         self.encoder.load_state_dict(dict["Encoder"])
         self.bottleneck.load_state_dict(dict["Bottleneck"])
         self.decoder.load_state_dict(dict["Decoder"])
-        self.final_conv.load_state_dict(dict["LastConv"])
+        
+        try:
+            self.final_conv.load_state_dict(dict["LastConv"])
+        except:
+            print("Final conv not initialized.")
 
     def forward(self, x):
         x = self.encoder(x)
