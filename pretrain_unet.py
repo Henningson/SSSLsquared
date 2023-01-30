@@ -97,7 +97,7 @@ def evaluate(dataloader, model):
     metric = score.SegmentationMetric(21)
     Printer.Header("EVALUATION")
     count = 0
-    for image, target in dataloader:
+    for image, target in tqdm(dataloader):
         image = image.to(DEVICE)
         target = target.to(DEVICE)
 
