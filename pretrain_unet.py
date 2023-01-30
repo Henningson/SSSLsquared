@@ -58,8 +58,8 @@ def main():
     loss = torch.nn.CrossEntropyLoss()
 
     for epoch in range(args.epochs):
-        evaluate(dataloader_val, model)
-        train(dataloader_train, loss, model, optimizer, epoch)
+        #evaluate(dataloader_val, model)
+        #train(dataloader_train, loss, model, optimizer, epoch)
 
         checkpoint = {"optimizer": optimizer.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + str(args.features) + ".pth.tar")

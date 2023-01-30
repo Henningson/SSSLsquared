@@ -50,7 +50,7 @@ class HLEPlusPlus(Dataset):
         vocalfold_mask_path = self.vocalfold_masks[index]
         point2D_path = self.laserpoints[index]
 
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32)
+        image = np.array(Image.open(img_path).convert("RGB"), dtype=np.float32)
 
         laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
         laserpoints[laserpoints == 255.0] = 1.0
@@ -164,7 +164,7 @@ class SBHLEPlusPlus(HLEPlusPlus):
         vocalfold_mask_path = self.vocalfold_masks[index]
         point2D_path = self.laserpoints[index]
 
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32)
+        image = np.array(Image.open(img_path).convert("RGB"), dtype=np.float32)
 
         laserpoints = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
         laserpoints[laserpoints == 255.0] = 1.0
