@@ -111,6 +111,7 @@ def testAugmentations():
             A.VerticalFlip(p=0.5),
             A.Perspective(scale=(0.05, 0.2), p=0.5),
             A.Normalize(
+                always_apply=True,
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],
                 max_pixel_value=255.0,

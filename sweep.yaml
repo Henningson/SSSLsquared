@@ -13,7 +13,7 @@ parameters:
   batch_size:
     values: [4, 6]
   model_depth:
-    values: [0, 1, 2]
+    values: [0, 1, 2, 3, 4, 5]
   kernel3d_size:
     values: [3, 5]
   num_epochs: 

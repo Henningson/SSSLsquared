@@ -75,6 +75,12 @@ def main():
             config["features"] = [64, 128, 256, 512]
         elif args.model_depth == 2:
             config["features"] = [64, 128, 256, 512, 1024]
+        elif args.model_depth == 3:
+            config["features"] = [32, 64, 128, 256]
+        elif args.model_depth == 4:
+            config["features"] = [32, 64, 128, 256, 512]
+        elif args.model_depth == 5:
+            config["features"] = [32, 64, 128, 256, 512, 1024]
 
     if not LOAD_FROM_CHECKPOINT:
         os.mkdir(CHECKPOINT_PATH)
