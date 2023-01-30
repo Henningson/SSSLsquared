@@ -19,6 +19,7 @@ import Losses
 import ConfigArgsParser
 from models.LSQ import LSQLocalization
 import sys
+import random
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -60,6 +61,9 @@ def main():
     CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     CHECKPOINT_NAME = CHECKPOINT_PATH.split("/")[-1]
 
+    # If we started a new run, and the path magically exists already, generate a new path.
+    if not LOAD_FROM_CHECKPOINT and os.path.exists(CHECKPOINT_PATH):
+        CHECKPOINT_PATH += "_" + str(random.randint(0, 1000))
 
     CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config
     TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"

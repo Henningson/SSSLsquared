@@ -38,7 +38,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-16-18:34:57/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-30-13:21:41/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -99,7 +99,12 @@ def main():
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
 
-        video.append(images.cpu().detach().numpy())
+
+        min_val = images.cpu().detach().min(axis=-1)[0].min(axis=-1)[0]
+        max_val = images.cpu().detach().max(axis=-1)[0].max(axis=-1)[0]
+        normalized_images = (images.detach().cpu() - min_val.unsqueeze(-1).unsqueeze(-1)) / (max_val.unsqueeze(-1).unsqueeze(-1) - min_val.unsqueeze(-1).unsqueeze(-1))
+
+        video.append(normalized_images.numpy())
         segmentations.append(segmentation)
         gt_segmentations.append(gt_seg)
 
