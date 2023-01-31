@@ -100,26 +100,27 @@ def show(imgs):
 
 def testAugmentations():
     config = utils.load_config("config.yml")
+    train_transform = A.load('train_transform.yaml', data_format='yaml')
 
-    train_transform = A.Compose([
-            A.ToFloat(always_apply=True, max_value=255),
-            A.RandomBrightness(limit=(-0.2, 0.8)),
-            A.Normalize(),
-            ToTensorV2(),
-        ],
-        keypoint_params=A.KeypointParams(format='xy')
-    )
+    # train_transform = A.Compose([
+    #         A.ToFloat(always_apply=True, max_value=255),
+    #         A.RandomBrightness(limit=(-0.2, 0.8)),
+    #         A.Normalize(),
+    #         ToTensorV2(),
+    #     ],
+    #     keypoint_params=A.KeypointParams(format='xy')
+    # )
 
-    A.save(train_transform, "test.yaml", data_format="yaml")
+    #A.save(train_transform, "test.yaml", data_format="yaml")
 
-    batch_size = 8
+    batch_size = 16
     #train_ds = HLEPlusPlus(base_path=config['dataset_path'], keys=config['train_keys'].split(","), pad_keypoints=config['pad_keypoints'], transform=train_transform)
     train_ds = SBHLEPlusPlus(config, transform=train_transform)
-    train_loader = DataLoader(train_ds, batch_size=16, num_workers=2, pin_memory=True, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, num_workers=2, pin_memory=True, shuffle=False)
 
     import Visualizer
     for im, seg, key in train_loader:
-        bla = Visualizer.Visualize2D(x=8, y=2)
+        bla = Visualizer.Visualize2D(x=batch_size//2, y=2)
         #grid = torchvision.utils.make_grid(im)
         #image = show(grid)
         #a = 1

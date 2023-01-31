@@ -11,6 +11,10 @@ transform:
     remove_invisible: true
   p: 1.0
   transforms:
+  - __class_fullname__: ToFloat
+    always_apply: true
+    max_value: 255
+    p: 1.0
   - __class_fullname__: Resize
     always_apply: false
     height: 512
