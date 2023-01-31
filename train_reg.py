@@ -164,7 +164,7 @@ def main():
 
         config["last_epoch"] = epoch
         with open(CHECKPOINT_PATH + "/config.yml", 'w') as outfile:
-            yaml.dump(config, outfile, default_flow_style=False)
+            yaml.dump(dict(config), outfile, default_flow_style=False)
 
     Printer.OKG("Training Done!")
 

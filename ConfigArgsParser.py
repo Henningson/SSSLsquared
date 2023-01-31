@@ -1,6 +1,8 @@
 import utils
 import argparse
+import yaml
 from printer import Printer
+
 
 class ConfigArgsParser(dict):
     def __init__(self, config, argparser, *arg, **kw):
@@ -61,3 +63,7 @@ if __name__ == "__main__":
     config = utils.load_config(CONFIG_PATH)
     cap = ConfigArgsParser(config, args)
     cap.printDifferences(config)
+
+
+    with open("blablabla.yml", 'w') as outfile:
+        yaml.dump(dict(cap), outfile, default_flow_style=False)
