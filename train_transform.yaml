@@ -11,6 +11,16 @@ transform:
     remove_invisible: true
   p: 1.0
   transforms:
+  - __class_fullname__: ToFloat
+    always_apply: true
+    max_value: 255
+    p: 1.0
+  - __class_fullname__: RandomBrightness
+    always_apply: false
+    limit:
+    - -0.2
+    - 0.8
+    p: 0.5
   - __class_fullname__: RandomGamma
     always_apply: false
     eps: null
