@@ -57,18 +57,11 @@ def get_basis(x, y):
     return basis
 
 
-def get_split_indices(nonzeros_indexing, device='cuda'):
-    index_jumps = nonzeros_indexing - torch.concat([torch.zeros(1).to(device), nonzeros_indexing])[0:-1]
-    split_at = index_jumps.nonzero().squeeze()
-    
-    split_at = split_at.unsqueeze(0) if split_at.dim() == 0 else split_at
-
-    split_list = []
-    for i in range(len(split_at)):
-        for j in range(index_jumps[split_at[i]].long()):
-            split_list.append(split_at[i])
-
-    return torch.tensor(split_list, device=device)
+def get_split_indices(nonzeros_indexing, batch_size, device='cuda'):
+    index, count = torch.unique(nonzeros_indexing, return_counts=True)
+    splits = torch.zeros((batch_size,), dtype=count.dtype, device=device)
+    splits[index] = count
+    return torch.cumsum(splits, 0)[:-1]
 
             
 def GuosBatchAnalytic(x, y, z):
@@ -143,7 +136,7 @@ class LSQLocalization:
         if len(maxima_indices) == 0:
             return None, None, None
 
-        split_indices = get_split_indices(maxima_indices[:, 0], device=self.device).tolist()
+        split_indices = get_split_indices(maxima_indices[:, 0], x.size(0), device=self.device).tolist()
 
         split_indices = [split_indices] if type(split_indices) == int else split_indices
 
