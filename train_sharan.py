@@ -112,12 +112,12 @@ def main():
     mseLoss = nn.MSELoss()
     diceLoss = DiceLoss()
 
-    repo = pygit2.Repository('.')
-    num_uncommitted_files = repo.diff().stats.files_changed
+    #repo = pygit2.Repository('.')
+    #num_uncommitted_files = repo.diff().stats.files_changed
 
-    if num_uncommitted_files > 0:
-        Printer.Warning("Uncommited changes! Please commit before training.")
-        exit()
+    #if num_uncommitted_files > 0:
+    #    Printer.Warning("Uncommited changes! Please commit before training.")
+    #    exit()
 
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adam(parameters, lr=config['learning_rate'])
@@ -129,7 +129,7 @@ def main():
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Train the network
-        train(train_loader, mseLoss, diceLoss, model, optimizer, epoch)
+        train(train_loader, model, optimizer, epoch)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "optimizer": optimizer.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
