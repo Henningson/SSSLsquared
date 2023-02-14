@@ -8,6 +8,59 @@ import random
 from albumentations.pytorch import ToTensorV2
 
 
+class SharanHLE(Dataset):
+    def __init__(self, config, is_train=True, transform=None):
+        base_path = config['dataset_path']
+        keys = config['train_keys'].split(",") if is_train else config['val_keys'].split(",")
+
+        self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
+        self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
+        self.heatmap_dirs = [os.path.join(base_path, key, "heatmap/") for key in keys]
+        
+        self.transform = transform
+        self.train_test_split = 0.9
+        
+        self.images = self.make_list(self.image_dirs)
+        self.laserpoint_masks = self.make_list(self.mask_dirs)
+        self.laserpoint_hm = self.make_list(self.heatmap_dirs)
+
+    def make_list(self, dirs):
+        list = []
+        for dir in dirs:
+            file_list = sorted(os.listdir(dir))
+
+            for file_path in file_list:
+                list.append(dir + file_path)
+
+        return list
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        mask_path = self.laserpoint_masks[index]
+        laserpoint_hm_path = self.laserpoint_hm[index]
+
+        image = np.array(Image.open(img_path).convert("RGB"), dtype=np.float32)
+
+        binseg = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        binseg[binseg == 255.0] = 1.0
+
+        heatmap = np.array(Image.open(laserpoint_hm_path).convert("L"), dtype=np.float32)
+        heatmap /= 255.0
+
+        transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
+
+        if self.transform is not None:
+            augmentations = self.transform(image=image, masks=[seg, heatmap])
+            
+            image = augmentations["image"]
+            seg = augmentations["masks"][0]
+            heatmap = augmentations["masks"][1]
+        
+        return image, seg, heatmap
+
 class HLEPlusPlus(Dataset):
     def __init__(self, config, is_train=True, transform=None):
         base_path = config['dataset_path']
