@@ -123,7 +123,7 @@ def main():
     optimizer = optim.Adam(parameters, lr=config['learning_rate'])
 
     train_ds = dataset.SharanHLE(config=config, is_train=True, transform=train_transform)
-    val_ds = dataset(config=config, is_train=False, transform=val_transforms)
+    val_ds = dataset.SharanHLE(config=config, is_train=False, transform=val_transforms)
     train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
 
