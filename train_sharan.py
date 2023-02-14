@@ -107,7 +107,7 @@ def main():
     train_transform = A.Compose([A.Resize(height=512, width=256),
                                 A.ColorJitter(brightness=0.2, contrast=(0.3, 1.5), saturation=(0.5, 2), hue=0.1, p=0.5),
                                 A.Rotate(limit=(-60, 60), p=0.5),
-                                A.IAAAffine(translate_percent=10, shear=0.1, p=0.5),
+                                A.Affine(translate_percent=10, shear=0.1, p=0.5),
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5)])
 
