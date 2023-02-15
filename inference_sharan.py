@@ -105,14 +105,11 @@ def main():
 
         torch.cuda.synchronize()
         starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
-        torch.cuda.synchronize()
         starter_cnn.record()
-        torch.cuda.synchronize()
         binary, logits = model(images)
-        torch.cuda.synchronize()
         ender_cnn.record()
         torch.cuda.synchronize()
-        
+
         inference_time += starter_cnn.elapsed_time(ender_cnn)
         count += logits.shape[0]
 
