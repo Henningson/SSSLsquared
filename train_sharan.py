@@ -11,6 +11,7 @@ import os
 import argparse
 import pygit2
 import utils
+from albumentations.pytorch import ToTensorV2
 import ConfigArgsParser
 import torch.nn.functional as F
 import dataset
@@ -61,7 +62,7 @@ def main():
                     prog = 'Keypoint Regularized Training for Semantic Segmentation',
                     description = 'Train a Segmentation Network that is optimized for simultaneously outputting keypoints',
                     epilog = 'Arguments can be used to overwrite values in a config file.')
-    parser.add_argument("--config", type=str, default="config.yml")
+    parser.add_argument("--config", type=str, default="config_sharan.yml")
     parser.add_argument("--logwandb", action="store_true")
     parser.add_argument("--pretrain", action="store_true")
 
@@ -86,31 +87,26 @@ def main():
     parser.add_argument("--keypoint_lambda", type=float)
     
     args = parser.parse_args()
-    
-    LOAD_FROM_CHECKPOINT = args.checkpoint is not None
-    CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("sharan", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
-    # Always add magic number to path ._.
-    if not LOAD_FROM_CHECKPOINT:
-        CHECKPOINT_PATH += "_" + str(random.randint(0, 10000))
-
+    CHECKPOINT_PATH = "sharan"
     CONFIG_PATH = args.config
-
     config = ConfigArgsParser.ConfigArgsParser(utils.load_config(CONFIG_PATH), args)
-
     train_transform = A.Compose([A.Resize(height=512, width=256),
+                                A.ToFloat(),
                                 A.ColorJitter(brightness=0.2, contrast=(0.3, 1.5), saturation=(0.5, 2), hue=0.1, p=0.5),
                                 A.Rotate(limit=(-60, 60), p=0.5),
                                 A.Affine(translate_percent=10, shear=0.1, p=0.5),
                                 A.HorizontalFlip(p=0.5),
-                                A.VerticalFlip(p=0.5)])
+                                A.VerticalFlip(p=0.5),
+                                A.Normalize(),
+                                ToTensorV2()])
 
-    val_transforms = A.Compose([A.Resize(height=512, width=256)])
+    val_transforms = A.Compose([A.Resize(height=512, width=256),
+                        A.ToFloat(),
+                        A.Normalize(),
+                        ToTensorV2()])
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config).to(DEVICE)
-    
-    mseLoss = nn.MSELoss()
-    diceLoss = DiceLoss()
 
     #repo = pygit2.Repository('.')
     #num_uncommitted_files = repo.diff().stats.files_changed
@@ -121,17 +117,18 @@ def main():
 
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adam(parameters, lr=config['learning_rate'])
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 
     train_ds = dataset.SharanHLE(config=config, is_train=True, transform=train_transform)
     val_ds = dataset.SharanHLE(config=config, is_train=False, transform=val_transforms)
-    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Train the network
         train(train_loader, model, optimizer, epoch)
 
-        checkpoint = {"optimizer": optimizer.state_dict(), "optimizer": optimizer.state_dict()} | model.get_statedict()
+        checkpoint = {"optimizer": optimizer.state_dict(), "optimizer": optimizer.state_dict()} | model.state_dict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
 
         config["last_epoch"] = epoch
@@ -154,13 +151,13 @@ def train(train_loader, model, optimizer, epoch):
 
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
-        gt_keypoints = gt_keypoints.to(device=DEVICE)
+        gt_heatmap = gt_heatmap.to(device=DEVICE)
 
         # forward
         binary, logits = model(images)
 
-        stage2_loss = mse(binary, gt_heatmap) + dice(binary, gt_heatmap)
-        stage1_loss = mse(logits, gt_heatmap) + dice(logits, gt_heatmap)
+        stage2_loss = mse(binary[:, 0], gt_heatmap) + dice(binary[:, 0], gt_heatmap)
+        stage1_loss = mse(logits[:, 0], gt_heatmap) + dice(logits[:, 0], gt_heatmap)
         loss = 0.5 * stage1_loss + 0.5 * stage2_loss
         loss.backward()
         optimizer.step()

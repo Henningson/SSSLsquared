@@ -58,13 +58,13 @@ class Visualize2D:
 
     def draw_points(self, point_lists, color='blue'):
         for count, points in enumerate(point_lists):
-            cpu_points = points.detach().cpu().numpy()
+            cpu_points = points
             self.plots[count].scatter(cpu_points[:, 1], cpu_points[:, 0], color=color)
 
-    def draw_heatmap(self, heat, heatmapaxis=0):
+    def draw_heatmap(self, heat, heatmapaxis=0, opacity=1.0):
         heatmap_squeezed = heat[:, heatmapaxis, :, :].detach().cpu().numpy()
         for i in range(heatmap_squeezed.shape[0]):
-            self.plots[i].imshow(heatmap_squeezed[i], cmap = self.cmap, interpolation = 'bicubic')
+            self.plots[i].imshow(heatmap_squeezed[i], cmap = self.cmap, interpolation = 'bicubic', alpha=opacity)
 
     def class_to_color(self, prediction, class_colors):
         prediction = np.expand_dims(prediction, 1)

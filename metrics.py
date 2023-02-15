@@ -81,6 +81,33 @@ class nnMSE:
     def compute(self):
         return sum(self.distances) / len(self.distances)
 
+
+class PointSetEvaluator:
+    def __init__(self, inlier_threshold=2.0, verbose=True):
+        self.verbose = verbose
+        self.inlier_threshold = inlier_threshold
+
+    def getTruePositives(self, a, b):
+        pass
+
+    def getFalsePositives(self, a, b):
+        pass
+
+    def getTrueNegatives(self, a, b):
+        pass
+
+    def getFalseNegatives(self, a, b):
+        pass
+
+    def compute(self, pointSetA, pointSetB):
+        tp = self.getTruePositives(pointSetA, pointSetB)
+        fp = self.getFalsePositives(pointSetA, pointSetB)
+        tn = self.getTrueNegatives(pointSetA, pointSetB)
+        tp = self.getFalseNegatives(pointSetA, pointSetB)
+
+        # First extract True Positives, False Positives, False Negatives
+
+
 if __name__ == "__main__":
     Precision = nnMSE(threshold=0.5)
     

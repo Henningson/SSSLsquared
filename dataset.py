@@ -16,13 +16,19 @@ class SharanHLE(Dataset):
         self.image_dirs = [os.path.join(base_path, key, "png/") for key in keys]
         self.mask_dirs = [os.path.join(base_path, key, "mask/") for key in keys]
         self.heatmap_dirs = [os.path.join(base_path, key, "heatmap/") for key in keys]
+        self.laserpoints_dirs = [os.path.join(base_path, key, "points2d/") for key in keys]
+        self.vocalfold_mask_dirs = [os.path.join(base_path, key, "vf_mask/") for key in keys]
         
         self.transform = transform
         self.train_test_split = 0.9
+        self.pad_keypoints = 200
         
         self.images = self.make_list(self.image_dirs)
         self.laserpoint_masks = self.make_list(self.mask_dirs)
         self.laserpoint_hm = self.make_list(self.heatmap_dirs)
+        self.laserpoints = self.make_list(self.laserpoints_dirs)
+        self.vocalfold_masks = self.make_list(self.vocalfold_mask_dirs)
+
 
     def make_list(self, dirs):
         list = []
@@ -41,6 +47,8 @@ class SharanHLE(Dataset):
         img_path = self.images[index]
         mask_path = self.laserpoint_masks[index]
         laserpoint_hm_path = self.laserpoint_hm[index]
+        vocalfold_mask_path = self.vocalfold_masks[index]
+        point2D_path = self.laserpoints[index]
 
         image = np.array(Image.open(img_path).convert("RGB"), dtype=np.float32)
 
@@ -50,16 +58,30 @@ class SharanHLE(Dataset):
         heatmap = np.array(Image.open(laserpoint_hm_path).convert("L"), dtype=np.float32)
         heatmap /= 255.0
 
-        transformed_vf_mask = torch.zeros(seg.shape, dtype=torch.int)
+        vocalfold_mask = np.array(Image.open(vocalfold_mask_path).convert("L"), dtype=np.float32)
+
+
+        keypoints = np.load(point2D_path)
+        keypoints[~(keypoints == 0).any(axis=1)]
 
         if self.transform is not None:
-            augmentations = self.transform(image=image, masks=[seg, heatmap])
+            augmentations = self.transform(image=image, masks=[binseg, heatmap, vocalfold_mask], keypoints=keypoints)
             
             image = augmentations["image"]
             seg = augmentations["masks"][0]
             heatmap = augmentations["masks"][1]
+            transformed_vf_mask = augmentations["masks"][2]
+            keypoints = augmentations["keypoints"]
         
-        return image, seg, heatmap
+        # Pad keypoints, such that tensor have all the same size
+        keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        if keypoints.nelement() != 0:
+            keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
+        to_pad = self.pad_keypoints - keypoints.shape[0]
+        keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
+        keypoints[(keypoints == 0.0)] = torch.nan
+        
+        return image, seg, heatmap, keypoints
 
 class HLEPlusPlus(Dataset):
     def __init__(self, config, is_train=True, transform=None):
@@ -140,7 +162,6 @@ class HLEPlusPlus(Dataset):
         to_pad = self.pad_keypoints - keypoints.shape[0]
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
         keypoints[(keypoints == 0.0)] = torch.nan
-        keypoints -= np.array([[1.0, 1.0]])
         
         return image, seg, keypoints
 
