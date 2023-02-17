@@ -12,7 +12,7 @@ class DoubleConv(nn.Module):
             nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True))
-        self.lstm = ConvLSTM(input_dim=out_channels, hidden_dim=out_channels, kernel_size=(3,3), num_layers=1, batch_first=True, return_all_layers=False)
+        self.lstm = ConvLSTM(input_dim=out_channels, hidden_dim=out_channels, kernel_size=(3,3), num_layers=2, batch_first=True, return_all_layers=False)
 
     def forward(self, x):
         x = self.conv(x)
