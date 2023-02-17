@@ -216,7 +216,7 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
         wandb.log({"Loss": running_average / len(train_loader)}, step=epoch)
 
 
-def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=2, log_wandb=False):
+def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=1, log_wandb=False):
     if not log_wandb:
         return
 
