@@ -33,18 +33,22 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     inference_time = 0
     point_detection_time = 0
     num_images = 0
+    num_images_for_inference_time = 0
+    count = 0
 
     model.eval()
     
     TP = 0
     FP = 0
     FN = 0
+    l2_distances  = []
     inference_time = 0
     loop = tqdm(val_loader, desc="EVAL")
     for images, gt_seg, keypoints in loop:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.long()
         
+        keypoints = keypoints.float()
         gt_keypoints = keypoints.split(1, dim=0)
         gt_keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in gt_keypoints]
 
@@ -56,27 +60,31 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         torch.cuda.synchronize()
         ender_cnn.record()
 
+        
+        curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
+        num_images += images.shape[0]
+
+        if count > 10:
+            num_images_for_inference_time += pred_seg.shape[0]
+            inference_time += curr_time_cnn
+
         acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
         dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
         loss = loss_func.cpu()(pred_seg.detach().cpu(), gt_seg).item()
-
-        curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
-        inference_time += curr_time_cnn
-        num_images += images.shape[0]
         running_average += loss
+
         
         if localizer is not None:
-            starter_lsq, ender_lsq = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
-            starter_lsq.record()
             segmentation = pred_seg.softmax(dim=1)
             segmentation_argmax = segmentation.argmax(dim=1)
+            starter_lsq, ender_lsq = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+            starter_lsq.record()
             try:
                 _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
             except:
                 print("Matrix probably singular. Whoopsie.")
                 continue
-            
             torch.cuda.synchronize()
             ender_lsq.record()
 
@@ -84,18 +92,22 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
                 continue
             
             
-            TP_temp, FP_temp, FN_temp = metrics_dom.keypoint_statistics(pred_keypoints, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+            TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(pred_keypoints, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
             TP += TP_temp
             FP += FP_temp
             FN += FN_temp
+            l2_distances = l2_distances + distances
 
             curr_time_point_detection = starter_lsq.elapsed_time(ender_lsq)
-            point_detection_time += curr_time_point_detection
+            if count > 10:
+                point_detection_time += curr_time_point_detection
 
         if localizer is not None:
-            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Precision": precision, "MSE": mse, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
+            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
         else:
             loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn})
+        
+        count += 1
 
     # Segmentation
     total_acc = Accuracy.compute()
@@ -127,15 +139,19 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     print("Eval Accuracy: {1}".format(epoch, total_acc))
     print("Eval IOU: {1}".format(epoch, total_IOU))
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
-    print("Inference Speed (ms): {:.4f}".format(inference_time / num_images))
     
     if localizer is not None:
         print("_______KEYPOINT STUFF_______")
-        print("AP: {:.4f}".format(ap))
-        print("F1: {:.4f}".format(f1))
-        print("DICE: {:.4f}".format(keypoint_dice))
-        print("Recall: {:.4f}".format(recoll))
-        print("Precision: {:.4f}".format(prec))
+        print("AP: {:.4f}".format(float(ap)))
+        print("F1: {:.4f}".format(float(f1)))
+        print("DICE: {:.4f}".format(float(keypoint_dice)))
+        print("Recall: {:.4f}".format(float(recoll)))
+        print("Precision: {:.4f}".format(float(prec)))
+        print("NME: {:.4f}".format(sum(l2_distances)/len(l2_distances)))
+
+        
+        print("Inference Speed (ms): {:.4f}".format(inference_time / num_images))
+        print("Point Speed (ms): {:.4f}".format(point_detection_time / num_images))
         print("Complete Time(ms): {:.4f}".format((inference_time + point_detection_time) / num_images))
 
     return eval_loss
@@ -147,7 +163,10 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-01-31-17:14:43_9554/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-02-17-12:36:27_7564/")
+    
+    #default="checkpoints/2023-02-17-12:36:27_7564/") COMPARISON BASIC UNET + pretrain
+    #default="checkpoints/2023-01-31-17:14:43_9554/") THE GOOD ONE
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -179,8 +198,8 @@ def main():
                                 heatmapaxis = config["heatmapaxis"], 
                                 threshold = 0.5,
                                 device=DEVICE)
-
-    evaluate(val_loader, model, loss, localizer=localizer)
+    with torch.no_grad():
+        evaluate(val_loader, model, loss, localizer=localizer)
 
 if __name__ == "__main__":
     main()

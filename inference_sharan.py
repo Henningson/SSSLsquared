@@ -95,11 +95,14 @@ def main():
     FP = 0
     FN = 0
     inference_time = 0
+    l2_distances = []
+    iters = 0
     count = 0
     for images, gt_seg, gt_heat, gt_keypoints in tqdm(val_loader, desc="Generating Video Frames"):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
         
+        gt_keypoints = gt_keypoints.float()
         gt_keypoints = gt_keypoints.split(1, dim=0)
         gt_keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in gt_keypoints]
 
@@ -110,16 +113,20 @@ def main():
         ender_cnn.record()
         torch.cuda.synchronize()
 
-        inference_time += starter_cnn.elapsed_time(ender_cnn)
-        count += logits.shape[0]
+        if iters > 10:
+            inference_time += starter_cnn.elapsed_time(ender_cnn)
+            count += logits.shape[0]
 
         points = [torch.tensor(centres_of_mass(logits[i, 0].detach().cpu().numpy(), 0.5), dtype=torch.float32) for i in range(logits.shape[0])]
         import metrics_dom
 
-        TP_temp, FP_temp, FN_temp = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+        TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
         TP += TP_temp
         FP += FP_temp
         FN += FN_temp
+        l2_distances = l2_distances + distances
+
+        iters += 1
 
     ap = metrics_dom.average_precision(TP, FP, FN)
     f1 = metrics_dom.f1_score(TP, FP, FN)
@@ -129,7 +136,7 @@ def main():
     inf_time = inference_time/count
 
     print("AP: {0}, F1: {1}, DICE: {2}, Recall: {3}, Precision: {4}, Inf. Time: {5}, FPS: {6}".format(ap, f1, dice, recoll, prec, inf_time, 1000/inf_time))
-
+    print("NME_TP: {0}".format(sum(l2_distances)/len(l2_distances)))
 
         #import matplotlib.pyplot as plt
         #bla = Visualizer.Visualize2D(x=4)

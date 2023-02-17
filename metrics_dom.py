@@ -77,7 +77,7 @@ def keypoint_statistics(
     kps_true = torch.stack([
         F.pad(kps, (0, 0, 0, max_true_keypoints - len(kps)), value=float('inf'))
         for kps in target
-    ]).to(prediction[0].device).astype(torch.float32)
+    ]).to(prediction[0].device)
     if target_format == 'yx':
         kps_true = torch.flip(kps_true, dims=[2])
 
@@ -126,4 +126,4 @@ def keypoint_statistics(
     TP = torch.count_nonzero(match_is_tp, dim=1)
     FP = len(assigned_distances) - TP + unmatched
 
-    return TP, FP, FN         
+    return TP, FP, FN, assigned_distances[match_is_tp[0, :]].tolist()
