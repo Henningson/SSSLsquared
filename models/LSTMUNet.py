@@ -15,7 +15,6 @@ class DoubleConv(nn.Module):
         self.lstm = ConvLSTM(input_dim=out_channels, hidden_dim=out_channels, kernel_size=(3,3), num_layers=1, batch_first=True, return_all_layers=False)
 
     def forward(self, x):
-        print(self.conv(x).shape)
         x = self.conv(x)
         a, b = self.lstm(x.unsqueeze(0))
         return a[0][0]
