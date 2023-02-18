@@ -9,13 +9,13 @@ class GlobalArgumentParser(argparse.ArgumentParser):
                 epilog = 'Text at the bottom of help'):
         argparse.ArgumentParser.__init__(self, prog, description, epilog)
 
-        self.add_argument("--config", type=str, default="config_sharan.yml")
+        self.add_argument("--config", type=str, default="config.yml")
         self.add_argument("--logwandb", action="store_true")
         self.add_argument("--pretrain", action="store_true")
+        self.add_argument("--checkpoint_name", type=str)
 
         self.add_argument("--optimizer", type=str)
         self.add_argument("--checkpoint", type=str)
-        self.add_argument("--checkpoint_name", type=str)
         
         self.add_argument("--model_depth", type=int)
         self.add_argument("--dataset_name", type=str)

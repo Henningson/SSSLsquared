@@ -38,7 +38,7 @@ def main():
     LOAD_FROM_CHECKPOINT = args.checkpoint is not None
 
     if args.checkpoint_name:
-        CHECKPOINT_PATH = os.path.join("checkpoints", checkpoint_name)
+        CHECKPOINT_PATH = os.path.join("checkpoints", args.checkpoint_name)
     else:
         CHECKPOINT_PATH = args.checkpoint if LOAD_FROM_CHECKPOINT else os.path.join("checkpoints", datetime.datetime.now().strftime('%Y-%m-%d-%H:%M:%S'))
     
@@ -46,7 +46,9 @@ def main():
 
     # Always add magic number to path ._.
     if not LOAD_FROM_CHECKPOINT:
-        CHECKPOINT_PATH += "_" + str(random.randint(0, 10000))
+        magic_number = str(random.randint(0, 10000))
+        CHECKPOINT_NAME += " " + magic_number
+        CHECKPOINT_PATH += "_" + magic_number
 
     CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config
     TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"
