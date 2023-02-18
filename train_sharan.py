@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import dataset
 import sys
 import random
+import Args
 
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -58,33 +59,10 @@ def f_beta_loss(pred, gt):
 
 
 def main():
-    parser = argparse.ArgumentParser(
+    parser = Args.GlobalArgumentParser(
                     prog = 'Keypoint Regularized Training for Semantic Segmentation',
                     description = 'Train a Segmentation Network that is optimized for simultaneously outputting keypoints',
                     epilog = 'Arguments can be used to overwrite values in a config file.')
-    parser.add_argument("--config", type=str, default="config_sharan.yml")
-    parser.add_argument("--logwandb", action="store_true")
-    parser.add_argument("--pretrain", action="store_true")
-
-    parser.add_argument("--optimizer", type=str)
-    parser.add_argument("--checkpoint", type=str)
-    parser.add_argument("--model_depth", type=int)
-
-    parser.add_argument("--dataset_name", type=str)
-    parser.add_argument("--dataset_path", type=str)
-
-    parser.add_argument("--model", type=str)
-    parser.add_argument("--learning_rate", type=float)
-    parser.add_argument("--batch_size", type=int)
-    parser.add_argument("--features", type=int, nargs="+")
-    parser.add_argument("--kernel3d_size", type=int)
-    parser.add_argument("--num_epochs", type=int)
-    parser.add_argument("--loss_weights", type=float, nargs="+")
-    parser.add_argument("--temporal_regularization_at", type=int)
-    parser.add_argument("--temporal_lambda", type=float)
-    parser.add_argument("--keypoint_regularization_at", type=int)
-    parser.add_argument("--nn_threshold", type=float)
-    parser.add_argument("--keypoint_lambda", type=float)
     
     args = parser.parse_args()
     CHECKPOINT_PATH = "sharan"
