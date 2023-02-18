@@ -7,7 +7,7 @@ class GlobalArgumentParser(argparse.ArgumentParser):
                 prog = 'ProgramName',
                 description = 'What the program does',
                 epilog = 'Text at the bottom of help'):
-        argparse.ArgumentParser.__init__(prog, description, epilog)
+        argparse.ArgumentParser.__init__(self, prog, description, epilog)
 
         self.add_argument("--config", type=str, default="config_sharan.yml")
         self.add_argument("--logwandb", action="store_true")
@@ -34,4 +34,13 @@ class GlobalArgumentParser(argparse.ArgumentParser):
         self.add_argument("--temporal_lambda", type=float)
         self.add_argument("--keypoint_regularization_at", type=int)
         self.add_argument("--nn_threshold", type=float)
-        self.add_argument("--keypoint_lambda", type=float)self
+        self.add_argument("--keypoint_lambda", type=float)
+
+if __name__ == "__main__":
+    parser = GlobalArgumentParser(
+                    prog = 'Keypoint Regularized Training for Semantic Segmentation',
+                    description = 'Train a Segmentation Network that is optimized for simultaneously outputting keypoints',
+                    epilog = 'Arguments can be used to overwrite values in a config file.')
+    
+    args = parser.parse_args()
+    print(args)

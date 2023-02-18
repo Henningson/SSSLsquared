@@ -65,7 +65,11 @@ def main():
                     epilog = 'Arguments can be used to overwrite values in a config file.')
     
     args = parser.parse_args()
-    CHECKPOINT_PATH = "sharan"
+    if args.checkpoint_name:
+        CHECKPOINT_PATH = args.checkpoint_name
+    else:
+        CHECKPOINT_PATH = "sharan"
+
     CONFIG_PATH = args.config
     config = ConfigArgsParser.ConfigArgsParser(utils.load_config(CONFIG_PATH), args)
     train_transform = A.Compose([A.Resize(height=512, width=256),
