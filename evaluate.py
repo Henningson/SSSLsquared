@@ -57,8 +57,8 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
         starter_cnn.record()
         pred_seg = model(images)
-        torch.cuda.synchronize()
         ender_cnn.record()
+        torch.cuda.synchronize()
 
         
         curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
@@ -85,8 +85,8 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             except:
                 print("Matrix probably singular. Whoopsie.")
                 continue
-            torch.cuda.synchronize()
             ender_lsq.record()
+            torch.cuda.synchronize()
 
             if pred_keypoints is None:
                 continue
@@ -163,8 +163,9 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2023-02-17-12:36:27_7564/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNet_LSTM_Good/")
     
+    #default="checkpoints/UNet_LSTM_Good/") Best LSTM Network, based on eval
     #default="checkpoints/2023-02-17-12:36:27_7564/") COMPARISON BASIC UNET + pretrain
     #default="checkpoints/2023-01-31-17:14:43_9554/") THE GOOD ONE
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
