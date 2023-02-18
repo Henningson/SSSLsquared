@@ -20,6 +20,7 @@ import ConfigArgsParser
 from models.LSQ import LSQLocalization
 import sys
 import random
+import Args
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
