@@ -40,6 +40,9 @@ def f1_score(tp:torch.Tensor, fp:torch.Tensor, fn:torch.Tensor) -> torch.Tensor:
     return 2.0 * p * r / torch.clamp_min(p + r, 1e-10)
 
 def average_precision(tp:torch.Tensor, fp:torch.Tensor, fn:torch.Tensor, dim:int=0) -> torch.Tensor:
+    if tp == 0 and fp == 0 and fn == 0:
+        return 0.0
+
     if tp.ndim == 2:
         raise ValueError("average_precision expects two dimensional inputs")
 

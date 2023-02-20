@@ -9,8 +9,10 @@ import matplotlib.cm as cm
 import viewer
 import torchmetrics
 import metrics
+from torchmetrics.functional import dice_score, jaccard_index
 import wandb
 import metrics_dom
+from typing import List, Union, Tuple, Optional
 
 from PyQt5.QtWidgets import QApplication
 from tqdm import tqdm
@@ -24,11 +26,7 @@ sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False):
-    Accuracy = torchmetrics.classification.MulticlassAccuracy(num_classes=4)
-    DICE = torchmetrics.Dice(num_classes=4)
-    IOU = torchmetrics.JaccardIndex(num_classes=4)
-
+def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False) -> Tuple[float, float, float, float, float, float]:
     running_average = 0.0
     inference_time = 0
     point_detection_time = 0
@@ -37,14 +35,23 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     count = 0
 
     model.eval()
-    
+
+    dice = 0.0
+    iou = 0.0
     TP = 0
     FP = 0
     FN = 0
     l2_distances  = []
+    nme = 0.0
+    precision = 0.0
     inference_time = 0
     loop = tqdm(val_loader, desc="EVAL")
     for images, gt_seg, keypoints in loop:
+        count += 1
+        # TODO REMOVE
+        if count > 11:
+            break
+
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.long()
         
@@ -60,17 +67,19 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         ender_cnn.record()
         torch.cuda.synchronize()
 
+        softmax = pred_seg.softmax(dim=1).detach().cpu()
+        argmax = softmax.argmax(dim=1)
         
         curr_time_cnn = starter_cnn.elapsed_time(ender_cnn)
         num_images += images.shape[0]
 
-        if count > 10:
+        if count > 2:
             num_images_for_inference_time += pred_seg.shape[0]
             inference_time += curr_time_cnn
 
-        acc = Accuracy(pred_seg.softmax(dim=1).detach().cpu(), gt_seg)
-        dice = DICE(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
-        iou = IOU(pred_seg.softmax(dim=1).argmax(dim=1).detach().cpu(), gt_seg)
+        dice += dice_score(argmax, gt_seg, bg=True)
+        iou += jaccard_index(argmax, gt_seg, num_classes=4)
+        
         loss = loss_func.cpu()(pred_seg.detach().cpu(), gt_seg).item()
         running_average += loss
 
@@ -81,7 +90,7 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             starter_lsq, ender_lsq = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
             starter_lsq.record()
             try:
-                _, pred_keypoints, _ = localizer.estimate(segmentation, torch.bitwise_or(segmentation_argmax == 2, segmentation_argmax == 3))
+                _, pred_keypoints, _ = localizer.estimate(segmentation)
             except:
                 print("Matrix probably singular. Whoopsie.")
                 continue
@@ -99,71 +108,131 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             l2_distances = l2_distances + distances
 
             curr_time_point_detection = starter_lsq.elapsed_time(ender_lsq)
-            if count > 10:
+            if count > 2:
                 point_detection_time += curr_time_point_detection
 
         if localizer is not None:
-            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
+            loop.set_postfix({"DICE": dice, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn, "Point Pred. Time:": curr_time_point_detection})
         else:
-            loop.set_postfix({"DICE": dice, "ACC": acc, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn})
+            loop.set_postfix({"DICE": dice, "Loss": loss, "IOU": iou, "Infer. Time": curr_time_cnn})
         
         count += 1
 
     # Segmentation
-    total_acc = Accuracy.compute()
-    total_dice = DICE.compute()
-    total_IOU = IOU.compute()
+    total_dice = dice / num_images
+    total_IOU = iou / num_images
     eval_loss = running_average / len(val_loader)
 
 
 
     if localizer is not None:
         # Keypoint Stuff
-        ap = metrics_dom.average_precision(TP, FP, FN)
-        f1 = metrics_dom.f1_score(TP, FP, FN)
-        keypoint_dice = metrics_dom.dice_score(TP, FP, FN)
-        recoll = metrics_dom.recall(TP, FP, FN)
-        prec = metrics_dom.precision(TP, FP, FN)
+        try:
+            precision = metrics_dom.precision(TP, FP, FN)
+            f1 = metrics_dom.f1_score(TP, FP, FN)
+            nme = sum(l2_distances)/len(l2_distances)
+        except:
+            precision = 0.0
+            ap = 0.0
+            f1 = 0.0
+            nme = 0.0
     
     
     if log_wandb:
         wandb.log({"Eval Loss": eval_loss}, step=epoch)
-        wandb.log({"Eval Accuracy": total_acc}, step=epoch)
         wandb.log({"Eval DICE": total_dice}, step=epoch)
         wandb.log({"Eval IOU": total_IOU}, step=epoch)
         wandb.log({"Inference Time (ms)": inference_time / num_images}, step=epoch)
 
-
     print("_______SEGMENTATION STUFF_______")
     print("Eval Loss: {1}".format(epoch, eval_loss))
-    print("Eval Accuracy: {1}".format(epoch, total_acc))
     print("Eval IOU: {1}".format(epoch, total_IOU))
     print("Eval DICE {0}: {1}".format(epoch, total_dice))
     
     if localizer is not None:
         print("_______KEYPOINT STUFF_______")
-        print("AP: {:.4f}".format(float(ap)))
-        print("F1: {:.4f}".format(float(f1)))
-        print("DICE: {:.4f}".format(float(keypoint_dice)))
-        print("Recall: {:.4f}".format(float(recoll)))
-        print("Precision: {:.4f}".format(float(prec)))
-        print("NME: {:.4f}".format(sum(l2_distances)/len(l2_distances)))
+        print("Precision: {0}".format(float(precision)))
+        print("F1: {0}".format(float(f1)))
+        print("NME: {0}".format(float(nme)))
 
         
-        print("Inference Speed (ms): {:.4f}".format(inference_time / num_images))
-        print("Point Speed (ms): {:.4f}".format(point_detection_time / num_images))
-        print("Complete Time(ms): {:.4f}".format((inference_time + point_detection_time) / num_images))
+        print("Inference Speed (ms): {0}".format(inference_time / num_images))
+        print("Point Speed (ms): {0}".format(point_detection_time / num_images))
+        print("Complete Time(ms): {0}".format((inference_time + point_detection_time) / num_images))
 
-    return eval_loss
+    return float(precision), float(f1), float(nme), float(total_IOU), float(total_dice), float((inference_time + point_detection_time) / num_images)
+
+
+
+# Input list of every model path that should be checked inside a class
+# For example [[UNET_A, UNET_B, UNET_C], [OURS_A, OURS_B, OURS_C], [..]]
+# Outputs [[[Precision, F1-Score, NME, IOU, DICE, InferenceSpeed], [..]] for every supplied model]
+def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_names: List[str]) -> List[List[List[float]]]:
+    group_evals = []
+    for MODEL_GROUP in checkpoints:
+        per_model_evals = []
+        for CHECKPOINT_PATH in MODEL_GROUP:
+            loss = torch.nn.CrossEntropyLoss()
+
+            if CHECKPOINT_PATH == "" or not os.path.isdir(CHECKPOINT_PATH):
+                print("\033[93m" + "Please provide a viable checkpoint path")
+
+            config = utils.load_config(os.path.join(CHECKPOINT_PATH, "config.yml"))
+            config["dataset_path"] = dataset_path
+            val_transforms = A.load(os.path.join(CHECKPOINT_PATH, "val_transform.yaml"), data_format='yaml')
+            neuralNet = __import__(config["model"])
+            model = neuralNet.Model(config, state_dict=torch.load(os.path.join(CHECKPOINT_PATH, "model.pth.tar"))).to(DEVICE)
+            dataset = __import__('dataset').__dict__[config['dataset_name']]
+            val_ds = dataset(config, is_train=False, transform=val_transforms)
+
+            val_loader = DataLoader(val_ds, 
+                                    batch_size=config['batch_size'],
+                                    num_workers=2, 
+                                    pin_memory=True, 
+                                    shuffle=False)
+            
+            localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
+                                        gauss_window = config["gauss_window"], 
+                                        heatmapaxis = config["heatmapaxis"], 
+                                        threshold = 0.5,
+                                        device=DEVICE)
+            with torch.no_grad():
+
+                print("#"*20)
+                print("#"*3 + " " + CHECKPOINT_PATH + " " + "#"*3)
+                print("#"*20)
+
+                evals = evaluate(val_loader, model, loss, localizer=localizer)
+                per_model_evals.append(evals)
+        group_evals.append(per_model_evals)
+
+    for group_name, group_scores in zip(group_names, group_evals):
+        print("############" + group_name + "############")
+        print("Precision, F1-Score, NME, IoU, DICE, Inference-Speed")
+        print(torch.tensor(group_scores).mean(dim=0))
+        print(torch.tensor(group_scores).std(dim=0))
+        print()
+        print()
 
 
 def main():
+    UNET_FULL = ["checkpoints/UNETFULL_CF_CM_3052", "checkpoints/UNETFULL_DD_FH_4761", "checkpoints/UNETFULL_LS_RH_2302", "checkpoints/UNETFULL_MK_MS_3426", "checkpoints/UNETFULL_SS_TM_7862"]
+    UNET = ["checkpoints/UNET_CF_CM_3052", "checkpoints/UNET_DD_FH_4761", "checkpoints/UNET_LS_RH_2302", "checkpoints/UNET_MK_MS_3426", "checkpoints/UNET_SS_TM_7862"]
+    OURS = ["checkpoints/OURS_CF_CM_6511", "checkpoints/OURS_DD_FH_1615", "checkpoints/OURS_LS_RH_8821", "checkpoints/OURS_MK_MS_4090", "checkpoints/OURS_SS_TM_1848"]
+    MODEL_GROUPS = [UNET, OURS]
 
+    evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', ["UNET", "OURS"])
+
+    exit()
+ 
     parser = argparse.ArgumentParser(
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNet_LSTM_Good/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNET_DD_FH_4761/")
+    
+    
+    #OURS_DD_FH_1615/")
     
     #default="checkpoints/UNet_LSTM_Good/") Best LSTM Network, based on eval
     #default="checkpoints/2023-02-17-12:36:27_7564/") COMPARISON BASIC UNET + pretrain
