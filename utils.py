@@ -36,3 +36,12 @@ def generate_weights_from_dataset(dataloader, num_classes):
         weights.append(max(elements_of_classes) / elements_of_classes[i])
 
     return weights
+
+def normalize_image_batch(images: torch.tensor) -> torch.tensor:
+    channelwise_minima = images.min(2, keepdim=True)[0].min(3, keepdim=True)[0]
+    channelwise_maxima = images.max(2, keepdim=True)[0].max(3, keepdim=True)[0]
+    return (images - channelwise_minima) / (channelwise_maxima - channelwise_minima)
+
+if __name__ == "__main__":
+    a = torch.randn((4, 3, 512, 512))
+    norm_a = normalize_image_batch(a)

@@ -21,6 +21,9 @@ from models.LSQ import LSQLocalization
 import sys
 import random
 import Args
+import utils
+
+import kornia
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -79,7 +82,8 @@ def main():
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config, state_dict=torch.load(os.path.join("pretrained", str(config["features"]) + ".pth.tar")) if args.pretrain else None, pretrain=True).to(DEVICE)
-    loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
+    #loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
+    loss = kornia.losses.dice_loss
     cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device="cpu"))
 
     if LOG_WANDB:
@@ -209,6 +213,8 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
     for images, gt_seg, _ in val_loader:
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
+
+        images = utils.normalize_image_batch(images)
 
         pred_seg = model(images).softmax(dim=1).argmax(dim=1)
 

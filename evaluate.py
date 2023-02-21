@@ -9,10 +9,12 @@ import matplotlib.cm as cm
 import viewer
 import torchmetrics
 import metrics
-from torchmetrics.functional import dice_score, jaccard_index
+import math
+from torchmetrics.functional import dice, jaccard_index
 import wandb
 import metrics_dom
 from typing import List, Union, Tuple, Optional
+from chamferdist import ChamferDistance
 
 from PyQt5.QtWidgets import QApplication
 from tqdm import tqdm
@@ -26,7 +28,7 @@ sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False) -> Tuple[float, float, float, float, float, float]:
+def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False) -> Tuple[float, float, float, float, float, float, float]:
     running_average = 0.0
     inference_time = 0
     point_detection_time = 0
@@ -36,11 +38,15 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
 
     model.eval()
 
-    dice = 0.0
+    dice_val = 0.0
     iou = 0.0
+    cham = 0.0
     TP = 0
     FP = 0
     FN = 0
+
+    chamloss = ChamferDistance()
+
     l2_distances  = []
     nme = 0.0
     precision = 0.0
@@ -48,9 +54,6 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     loop = tqdm(val_loader, desc="EVAL")
     for images, gt_seg, keypoints in loop:
         count += 1
-        # TODO REMOVE
-        if count > 11:
-            break
 
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.long()
@@ -77,7 +80,7 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             num_images_for_inference_time += pred_seg.shape[0]
             inference_time += curr_time_cnn
 
-        dice += dice_score(argmax, gt_seg, bg=True)
+        dice_val += dice(argmax, gt_seg, num_classes=4)
         iou += jaccard_index(argmax, gt_seg, num_classes=4)
         
         loss = loss_func.cpu()(pred_seg.detach().cpu(), gt_seg).item()
@@ -107,6 +110,9 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
             FN += FN_temp
             l2_distances = l2_distances + distances
 
+            for i in range(len(pred_keypoints)):
+                cham += (chamloss(gt_keypoints[i].unsqueeze(0), pred_keypoints[i].unsqueeze(0).detach().cpu(), bidirectional=True) / math.sqrt(512*512 + 256*256))
+
             curr_time_point_detection = starter_lsq.elapsed_time(ender_lsq)
             if count > 2:
                 point_detection_time += curr_time_point_detection
@@ -119,8 +125,9 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         count += 1
 
     # Segmentation
-    total_dice = dice / num_images
+    total_dice = dice_val / num_images
     total_IOU = iou / num_images
+    total_CHAM = cham / num_images
     eval_loss = running_average / len(val_loader)
 
 
@@ -154,13 +161,14 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
         print("Precision: {0}".format(float(precision)))
         print("F1: {0}".format(float(f1)))
         print("NME: {0}".format(float(nme)))
+        print("ChamferDistance: {0}".format(float(total_CHAM)))
 
         
         print("Inference Speed (ms): {0}".format(inference_time / num_images))
         print("Point Speed (ms): {0}".format(point_detection_time / num_images))
         print("Complete Time(ms): {0}".format((inference_time + point_detection_time) / num_images))
 
-    return float(precision), float(f1), float(nme), float(total_IOU), float(total_dice), float((inference_time + point_detection_time) / num_images)
+    return float(precision), float(f1), float(nme), float(total_IOU), float(total_dice), float((inference_time + point_detection_time) / num_images), float(total_CHAM)
 
 
 
@@ -216,12 +224,27 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
 
 def main():
-    UNET_FULL = ["checkpoints/UNETFULL_CF_CM_3052", "checkpoints/UNETFULL_DD_FH_4761", "checkpoints/UNETFULL_LS_RH_2302", "checkpoints/UNETFULL_MK_MS_3426", "checkpoints/UNETFULL_SS_TM_7862"]
-    UNET = ["checkpoints/UNET_CF_CM_3052", "checkpoints/UNET_DD_FH_4761", "checkpoints/UNET_LS_RH_2302", "checkpoints/UNET_MK_MS_3426", "checkpoints/UNET_SS_TM_7862"]
-    OURS = ["checkpoints/OURS_CF_CM_6511", "checkpoints/OURS_DD_FH_1615", "checkpoints/OURS_LS_RH_8821", "checkpoints/OURS_MK_MS_4090", "checkpoints/OURS_SS_TM_1848"]
-    MODEL_GROUPS = [UNET, OURS]
+    UNET_AWESOME = ["checkpoints/2023-01-31-17:14:43_9554"]
+    UNET_FULL = ["checkpoints/UNETFULL_CF_CM_7916", 
+                    "checkpoints/UNETFULL_DD_FH_559", 
+                    "checkpoints/UNETFULL_LS_RH_2342", 
+                    "checkpoints/UNETFULL_MK_MS_705", 
+                    "checkpoints/UNETFULL_SS_TM_2398"]
+    UNET = ["checkpoints/UNET_CF_CM_3052", 
+                "checkpoints/UNET_DD_FH_4761", 
+                "checkpoints/UNET_LS_RH_2302", 
+                "checkpoints/UNET_MK_MS_3426",
+                "checkpoints/UNET_SS_TM_7862"]
+    OURS = ["checkpoints/OURS_CF_CM_6511", 
+                "checkpoints/OURS_DD_FH_1615", 
+                "checkpoints/OURS_LS_RH_8821", 
+                "checkpoints/OURS_MK_MS_4090", 
+                "checkpoints/OURS_SS_TM_1848"]
+    
+    MODEL_GROUPS = [UNET_AWESOME, UNET_FULL, UNET, OURS]
+    MODEL_GROUP_NAMES = ["UNET_AWESOME", "UNET_FULL", "UNET", "OURS"]
 
-    evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', ["UNET", "OURS"])
+    evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', MODEL_GROUP_NAMES)
 
     exit()
  
