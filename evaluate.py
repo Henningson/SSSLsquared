@@ -41,6 +41,7 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     dice_val = 0.0
     iou = 0.0
     cham = 0.0
+    f1=0.0
     TP = 0
     FP = 0
     FN = 0
