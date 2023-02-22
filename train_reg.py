@@ -214,9 +214,9 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
+        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
         images = utils.normalize_image_batch(images)
 
-        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
 
         for i in range(num_log):
             wandb.log(
