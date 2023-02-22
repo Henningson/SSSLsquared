@@ -82,8 +82,8 @@ def main():
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config, state_dict=torch.load(os.path.join("pretrained", str(config["features"]) + ".pth.tar")) if args.pretrain else None, pretrain=True).to(DEVICE)
-    #loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
-    loss = kornia.losses.dice_loss
+    loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device=DEVICE))
+    #loss = kornia.losses.dice_loss
     cpu_loss = nn.CrossEntropyLoss(weight=torch.tensor(config["loss_weights"], dtype=torch.float32, device="cpu"))
 
     if LOG_WANDB:
