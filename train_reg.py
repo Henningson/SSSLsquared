@@ -22,12 +22,13 @@ import sys
 import random
 import Args
 import utils
+import wandb
 
 import kornia
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+torch.manual_seed(0)
 
-import wandb
 
 def main():
     parser = Args.GlobalArgumentParser(
