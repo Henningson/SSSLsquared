@@ -51,7 +51,7 @@ def main():
     # Always add magic number to path ._.
     if not LOAD_FROM_CHECKPOINT:
         magic_number = str(random.randint(0, 10000))
-        CHECKPOINT_NAME += " " + magic_number
+        CHECKPOINT_NAME += "_" + magic_number
         CHECKPOINT_PATH += "_" + magic_number
 
     CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config

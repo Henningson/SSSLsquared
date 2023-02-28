@@ -132,20 +132,21 @@ class Model(nn.Module):
 
 def test():
 
-    batch_size = 1
+    batch_size = 4
     sequence_length = 6
-    config={'batch_size': batch_size, 'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512], 'sequence_length': sequence_length}
+    config={'batch_size': batch_size, 'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512, 1024], 'sequence_length': sequence_length}
     x = torch.randn((batch_size, 6, 512, 256), device='cuda')
     y = torch.randn((batch_size, 4, 100), device='cuda')
     model = Model(config, device='cuda').to('cuda')
     
     for i in range(500):
         starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+        torch.cuda.synchronize()
         starter_cnn.record()
         seg = model(x)
         ender_cnn.record()
         torch.cuda.synchronize()
-        print(starter_cnn.elapsed_time(ender_cnn) / sequence_length)
+        print(starter_cnn.elapsed_time(ender_cnn) / (batch_size * sequence_length))
 
     # Seems to be working
 
