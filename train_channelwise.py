@@ -7,17 +7,18 @@ from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
 import yaml
-from evaluate import evaluate
+#from evaluate import evaluate
 from printer import Printer
 import os
 import argparse
 import pygit2
-import Visualizer
+#import Visualizer
 import cv2
 import utils
 import Losses
 import ConfigArgsParser
 from models.LSQ import LSQLocalization
+from typing import List, Union, Tuple, Optional
 import sys
 import random
 import Args
@@ -54,9 +55,9 @@ def main():
         CHECKPOINT_NAME += "_" + magic_number
         CHECKPOINT_PATH += "_" + magic_number
 
-    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config
-    TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform.yaml"
-    VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform.yaml"
+    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else "config_channelwise.yml"
+    TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform_sequence.yaml"
+    VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform_sequence.yaml"
 
     config = ConfigArgsParser.ConfigArgsParser(utils.load_config(CONFIG_PATH), args)
     
@@ -113,7 +114,7 @@ def main():
     dataset = __import__('dataset').__dict__[config['dataset_name']]
     train_ds = dataset(config=config, is_train=True, transform=train_transform)
     val_ds = dataset(config=config, is_train=False, transform=val_transforms)
-    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=config['batch_size'], num_workers=config['num_workers'], pin_memory=True, shuffle=False)
 
     localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
@@ -130,10 +131,10 @@ def main():
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Evaluate on Validation Set
-        #evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
+        evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
-        #visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
+        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
         visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
 
         # Train the network
@@ -145,9 +146,7 @@ def main():
                 localizer, 
                 use_regression=epoch > config['keypoint_regularization_at'] - 1,
                 keypoint_lambda=config['keypoint_lambda'], 
-                log_wandb=False,
-                temporal_smoothing=epoch > config['temporal_regularization_at'] - 1,
-                temporal_lambda=config['temporal_lambda'])
+                log_wandb=False)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
@@ -158,7 +157,7 @@ def main():
 
     Printer.OKG("Training Done!")
 
-def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False, temporal_smoothing = False, heatmapaxis=3, temporal_lambda=0.01):
+def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regression = False, keypoint_lambda=0.1, log_wandb = False):
     Printer.Header("EPOCH: {0}".format(epoch))
     model.train()
     running_average = 0.0
@@ -190,9 +189,6 @@ def train(train_loader, loss_func, model, scheduler, epoch, localizer, use_regre
                 keypoint_loss = Losses.chamfer(pred_keypoints, gt_keypoints)
                 loss += keypoint_lambda * (keypoint_loss if type(keypoint_loss) == float else keypoint_loss.item())
 
-        if temporal_smoothing:
-            loss += temporal_lambda * segmentation[:, heatmapaxis, :, :].var(dim=0).mean()
-
 
         loss.backward()
         scheduler.step()
@@ -215,8 +211,8 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
-        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
-        images = utils.normalize_image_batch(images)
+        pred_seg = model(images)[0].softmax(dim=1).argmax(dim=1)
+        images = utils.normalize_image_batch(images)[0].unsqueeze(0)
 
 
         for i in range(num_log):
@@ -234,33 +230,121 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
         return
 
 
-def generate_video(model, data_loader, path):
-    model.eval()
+
+import metrics_dom
+from chamferdist import ChamferDistance
+from torchmetrics.functional import dice, jaccard_index
+def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False) -> Tuple[float, float, float, float, float, float, float]:
+    running_average = 0.0
+    num_images = 0
     count = 0
-    video_list = []
 
-    for images, gt_seg, _ in data_loader:
+    model.eval()
+
+    dice_val = 0.0
+    iou = 0.0
+    cham = 0.0
+    f1=0.0
+    TP = 0
+    FP = 0
+    FN = 0
+
+    chamloss = ChamferDistance()
+
+    l2_distances  = []
+    nme = 0.0
+    precision = 0.0
+    inference_time = 0
+    loop = tqdm(val_loader, desc="EVAL")
+    for images, gt_seg, keypoints in loop:
+        count += 1
+
         images = images.to(device=DEVICE)
-        gt_seg = gt_seg.to(device=DEVICE)
+        gt_seg = gt_seg.long()
+        
+        keypoints = keypoints.float()
+        pred_seg = model(images)
 
-        pred_seg = model(images).softmax(dim=1).argmax(dim=1)
+        softmax = pred_seg.softmax(dim=1).detach().cpu()
+        argmax = softmax.argmax(dim=1)
+        num_images += images.shape[0]
 
-        visualizer = Visualizer.Visualize2D(x=1, y=1, remove_border=True, do_not_open=True)
-        visualizer.draw_images(images)
-        visualizer.draw_segmentation(pred_seg, 4, opacity=0.8)
+        dice_val += dice(argmax, gt_seg, num_classes=4)
+        iou += jaccard_index(argmax, gt_seg, num_classes=4)
+        
+        loss = loss_func.cpu()(pred_seg.detach().cpu(), gt_seg).item()
+        running_average += loss
 
-        frame = visualizer.get_as_numpy_arr()
-        visualizer.close()
+        if localizer is not None:
+            segmentation = pred_seg.softmax(dim=1)
+            for i in range(segmentation.shape[0]):
+                try:
+                    _, pred_keypoints, _ = localizer.estimate(segmentation[i])
+                except:
+                    print("Matrix probably singular. Whoopsie.")
+                    continue
 
-        # CHANNELS x WIDTH x HEIGHT!!!
-        frame = frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0])
-        video_list.append(frame)
-        count += images.shape[0]
+                if pred_keypoints is None:
+                    continue
+                
+                gt_keypoints = keypoints[i]
+                gt_keypoints = keypoints.split(1, dim=0)
+                gt_keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in gt_keypoints]
 
-    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 10, (video_list[0].shape[1], video_list[0].shape[2]))
-    for frame in video_list:
-        out.write(frame.reshape(frame.shape[2], frame.shape[1], frame.shape[0]))
-    out.release()
+                TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(pred_keypoints, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+                TP += TP_temp
+                FP += FP_temp
+                FN += FN_temp
+                l2_distances = l2_distances + distances
+
+                for j in range(len(pred_keypoints)):
+                    cham += chamloss(gt_keypoints[j].unsqueeze(0), pred_keypoints[j].unsqueeze(0).detach().cpu(), bidirectional=True)
+
+        if localizer is not None:
+            loop.set_postfix({"DICE": dice_val, "Loss": loss, "IOU": iou})
+        else:
+            loop.set_postfix({"DICE": dice_val, "Loss": loss, "IOU": iou})
+        
+        count += 1
+
+    # Segmentation
+    total_dice = dice_val / num_images
+    total_IOU = iou / num_images
+    total_CHAM = cham / num_images
+    eval_loss = running_average / len(val_loader)
+
+    if localizer is not None:
+        # Keypoint Stuff
+        try:
+            precision = metrics_dom.precision(TP, FP, FN)
+            f1 = metrics_dom.f1_score(TP, FP, FN)
+            nme = sum(l2_distances)/len(l2_distances)
+        except:
+            precision = 0.0
+            ap = 0.0
+            f1 = 0.0
+            nme = 0.0
+    
+    
+    if log_wandb:
+        wandb.log({"Eval Loss": eval_loss}, step=epoch)
+        wandb.log({"Eval DICE": total_dice}, step=epoch)
+        wandb.log({"Eval IOU": total_IOU}, step=epoch)
+        wandb.log({"Inference Time (ms)": inference_time / num_images}, step=epoch)
+
+    print("_______SEGMENTATION STUFF_______")
+    print("Eval Loss: {1}".format(epoch, eval_loss))
+    print("Eval IOU: {1}".format(epoch, total_IOU))
+    print("Eval DICE {0}: {1}".format(epoch, total_dice))
+    
+    if localizer is not None:
+        print("_______KEYPOINT STUFF_______")
+        print("Precision: {0}".format(float(precision)))
+        print("F1: {0}".format(float(f1)))
+        print("NME: {0}".format(float(nme)))
+        print("ChamferDistance: {0}".format(float(total_CHAM)))
+
+    return float(precision), float(f1), float(nme), float(total_IOU), float(total_dice), float(total_CHAM)
 
 
 if __name__ == "__main__":
