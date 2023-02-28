@@ -174,9 +174,9 @@ class SequenceHLEPlusPlus(Dataset):
         return list
 
     def __len__(self):
-        dataset_size = len(self.images) - self.sequence_lenngth - 1
+        dataset_size = len(self.images) - self.sequence_length - 1
         dataset_size -= (dataset_size % self.batch_size)
-        return len(self.images) - self.sequence_length - 1
+        return dataset_size
 
     def __getitem__(self, index):
         image_list = []
