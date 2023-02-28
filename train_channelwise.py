@@ -133,7 +133,7 @@ def main():
         # Evaluate on Validation Set
         visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
         visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
-        
+
         evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
@@ -212,19 +212,20 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
-        pred_seg = model(images)[0].softmax(dim=1).argmax(dim=1)
-        images = utils.normalize_image_batch(images)[0].unsqueeze(0)
+        pred_seg = model(images)
+        images = utils.normalize_image_batch(images)
 
 
         for i in range(num_log):
+            pred_temp = pred_seg[0, :, i].softmax(dim=0).argmax(dim=0)
             wandb.log(
-            {"{0} {1}".format(title, i) : wandb.Image(images[i].detach().cpu().moveaxis(0, -1).numpy(), masks={
+            {"{0} {1}".format(title, i) : wandb.Image(images[i, 0].detach().cpu().numpy(), masks={
                 "predictions" : {
-                    "mask_data" : pred_seg[i].detach().cpu().numpy(),
+                    "mask_data" : pred_temp.detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
                 },
                 "ground_truth" : {
-                    "mask_data" : gt_seg[i].detach().cpu().numpy(),
+                    "mask_data" : gt_seg[0, i].detach().cpu().numpy(),
                     "class_labels" : {0: "Background", 1: "Glottis", 2: "Vocalfold", 3: "Laserpoints"}
                 }
             })}, step=epoch)
