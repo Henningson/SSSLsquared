@@ -55,7 +55,7 @@ def main():
         CHECKPOINT_NAME += "_" + magic_number
         CHECKPOINT_PATH += "_" + magic_number
 
-    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else "config_channelwise.yml"
+    CONFIG_PATH = os.path.join(CHECKPOINT_PATH, "config.yml") if LOAD_FROM_CHECKPOINT else args.config
     TRAIN_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "train_transform.yaml") if LOAD_FROM_CHECKPOINT else "train_transform_sequence.yaml"
     VAL_TRANSFORM_PATH = os.path.join(CHECKPOINT_PATH, "val_transform.yaml") if LOAD_FROM_CHECKPOINT else "val_transform_sequence.yaml"
 
