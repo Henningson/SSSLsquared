@@ -205,7 +205,6 @@ class SequenceHLEPlusPlus(Dataset):
             if self.transform is not None:
                 random.seed(seed)
                 imgaug.random.seed(seed)
-                print(seed)
                 augmentations = self.transform(image=image, masks=[seg, vocalfold_mask], keypoints=keypoints)
                 
                 image = augmentations["image"]

@@ -125,15 +125,15 @@ def main():
         wandb.watch(model)
     
     # Save config stuff
-    A.save(train_transform, CHECKPOINT_PATH + "/train_transform.yaml", data_format="yaml")
-    A.save(val_transforms, CHECKPOINT_PATH + "/val_transform.yaml", data_format="yaml")
+    A.save(train_transform, CHECKPOINT_PATH + "/train_transform_sequence.yaml", data_format="yaml")
+    A.save(val_transforms, CHECKPOINT_PATH + "/val_transform_sequence.yaml", data_format="yaml")
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Evaluate on Validation Set
-        evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
+        #evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
-        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
+        #visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
         visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
 
         # Train the network
