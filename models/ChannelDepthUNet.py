@@ -68,7 +68,7 @@ class Encoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, config={'in_channels': 3, 'out_channels': 4, 'features': [64, 128, 256, 512], 'batch_size': 4}, pretrain=False, state_dict=None, device="cuda"):
+    def __init__(self, config={'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512], 'batch_size': 4}, pretrain=False, state_dict=None, device="cuda"):
         super(Model, self).__init__()
         try:
             in_channels = config['in_channels']
@@ -80,6 +80,7 @@ class Model(nn.Module):
         except:
             out_channels = 4
             
+        self.sequence_length = config['sequence_length']
         features = config['features']
         batch_size = config['batch_size']
 
@@ -91,7 +92,7 @@ class Model(nn.Module):
         self.depth_conv = nn.Sequential(nn.Conv3d(batch_size, batch_size, kernel_size=3, padding=1, stride=1),
                             nn.BatchNorm3d(batch_size),
                             nn.ReLU())
-        self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        self.final_conv = nn.Conv3d(features[0], out_channels, kernel_size=3, padding=1, stride=1)
 
         if state_dict:
             self.load_from_dict(state_dict)
@@ -125,28 +126,26 @@ class Model(nn.Module):
         x = self.bottleneck(x)
         x = self.depth_conv(x.unsqueeze(0))[0]
         x = self.decoder(x)
-
-        return self.final_conv(x)
+        x = self.final_conv(x.unsqueeze(2).repeat(1, 1, self.sequence_length, 1, 1))
+        return x.swapaxes(1, 2)
 
 
 def test():
-    import pytorch_modelsize.SizeEstimator as SE
 
-    batch_size = 4
-    x = torch.randn((batch_size, 3, 512, 256))
-    y = torch.randn((batch_size, 2, 100))
-    model = Model()
+    batch_size = 1
+    sequence_length = 6
+    config={'batch_size': batch_size, 'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512], 'sequence_length': sequence_length}
+    x = torch.randn((batch_size, 6, 512, 256), device='cuda')
+    y = torch.randn((batch_size, 4, 100), device='cuda')
+    model = Model(config, device='cuda').to('cuda')
     
-
-    estimator = SE(model, x.shape)
-    print(estimator.estimate_size())
-    
-    seg = model(x)
-    print(type(model).__name__)
-    #print(points.shape)
-
-    #print(Losses.CountingLoss(points.reshape(4, 2, -1), y))
-    #print(CHM_loss.apply(points.reshape(4, 2, -1), y))
+    for i in range(500):
+        starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+        starter_cnn.record()
+        seg = model(x)
+        ender_cnn.record()
+        torch.cuda.synchronize()
+        print(starter_cnn.elapsed_time(ender_cnn) / sequence_length)
 
     # Seems to be working
 

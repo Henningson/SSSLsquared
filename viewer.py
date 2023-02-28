@@ -122,6 +122,10 @@ class MainWindow(QMainWindow):
         elif event.key() == Qt.Key_Space:
              self.seg_view.zoomReset()
              self.video_view.zoomReset()
+        elif event.key() == Qt.Key_P:
+            self.saveImages()
+        
+        print(self.current_img_index)
 
     def prevImage(self):
         prev_index = self.current_img_index - 1 if self.current_img_index > 0 else self.current_img_index
@@ -132,6 +136,16 @@ class MainWindow(QMainWindow):
         next_index = self.current_img_index + 1 if self.current_img_index < self.video.shape[0] - 1 else self.current_img_index
         self.current_img_index = next_index
         self._redraw()
+
+    def saveImages(self):
+        self.saveImage(self.video_view, "GT_Image.png")
+        self.saveImage(self.seg_view, "Seg_image.png")
+        self.saveImage(self.gtseg_view, "GTSeg_Image.png")
+        self.saveImage(self.error_view, "Error_Image.png")
+
+    def saveImage(self, view, filename):
+        img = view.grab()
+        img.save(filename)
 
     def _redraw(self):
         self.redraw(self.seg_scene, self.segmentations)

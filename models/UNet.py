@@ -119,13 +119,21 @@ class Model(nn.Module):
         return self.final_conv(x)
 
 
+
+
 def test():
+    import sys
+    sys.path.append("..")
+    from pytorch_modelsize import SizeEstimator
 
-    x = torch.randn((4, 3, 512, 256))
-    y = torch.randn((4, 2, 100))
-    model = Model(in_channels=3, out_channels=3)
-    seg = model(x)
-
+    config={'in_channels': 3, 'out_channels': 324, 'features': [64, 128, 256, 512, 1024]}
+    rand_input = torch.randn((4, 3, 512, 256))
+    expected_output_size = torch.randn((4, 324, 100))
+    bla = model(rand_input)
+    model = Model(config)
+    se = SizeEstimator(model, rand_input.shape)
+    
+    print(se.estimate_size())
     print(type(model).__name__)
     #print(points.shape)
 

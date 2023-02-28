@@ -49,6 +49,10 @@ class Visualize2D:
         for i in range(colored.shape[0]):
             self.plots[i].imshow(np.moveaxis(colored[i], 0, -1), cmap = 'gray', interpolation = 'bicubic', alpha=opacity)
 
+    def draw_sequence(self, images, axis=0):
+        images_squeezed = images[axis, :, :, :].detach().cpu().numpy()
+        for i in range(images_squeezed.shape[0]):
+            self.plots[i].imshow(images_squeezed[i], cmap = 'gray', interpolation = 'bicubic')
 
 
     def draw_images(self, images):

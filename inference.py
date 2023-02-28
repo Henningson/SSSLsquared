@@ -18,7 +18,7 @@ import Visualizer
 import sys
 sys.path.append("models/")
 
-DEVICE = 'cpu'#"cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def class_to_color(prediction, class_colors):
@@ -38,7 +38,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNET_SS_TM_7862/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/OURS_DDFH_SGD_1686/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -75,10 +75,11 @@ def main():
 
     segmentations = []
     gt_segmentations = []
+    predictions = []
 
     perFramePoints = []
     gt_points = []
-    colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'])]
+    colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'] - 1)]
 
     model.eval()
     for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
@@ -96,6 +97,9 @@ def main():
 
         _, means, _ = localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
 
+
+        segmentation = torch.where(segmentation == 3, 2, segmentation)
+        gt_seg = torch.where(gt_seg == 3, 2, gt_seg)
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
 
@@ -104,6 +108,7 @@ def main():
         max_val = images.cpu().detach().max(axis=-1)[0].max(axis=-1)[0]
         normalized_images = (images.detach().cpu() - min_val.unsqueeze(-1).unsqueeze(-1)) / (max_val.unsqueeze(-1).unsqueeze(-1) - min_val.unsqueeze(-1).unsqueeze(-1))
 
+        predictions.append(prediction.detach().cpu().numpy())
         video.append(normalized_images.numpy())
         segmentations.append(segmentation)
         gt_segmentations.append(gt_seg)
@@ -122,6 +127,7 @@ def main():
             perFramePoints.append(mean)
 
 
+    predictions_concat = np.concatenate(predictions, axis=0)
     video = np.moveaxis((np.concatenate(video, axis=0)*255).astype(np.uint8), 1, -1)
     segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
     gt_segmentations = (np.moveaxis(np.concatenate(gt_segmentations, axis=0), 1, -1)*255).astype(np.uint8)

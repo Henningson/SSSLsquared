@@ -225,25 +225,32 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
 
 def main():
-    UNET_AWESOME = ["checkpoints/2023-01-31-17:14:43_9554"]
     UNET_FULL = ["checkpoints/UNETFULL_CF_CM_7916", 
                     "checkpoints/UNETFULL_DD_FH_559", 
                     "checkpoints/UNETFULL_LS_RH_2342", 
                     "checkpoints/UNETFULL_MK_MS_705", 
                     "checkpoints/UNETFULL_SS_TM_2398"]
+    
     UNET = ["checkpoints/UNET_CF_CM_3052", 
                 "checkpoints/UNET_DD_FH_4761", 
                 "checkpoints/UNET_LS_RH_2302", 
                 "checkpoints/UNET_MK_MS_3426",
                 "checkpoints/UNET_SS_TM_7862"]
+    
     OURS = ["checkpoints/OURS_CF_CM_6511", 
                 "checkpoints/OURS_DD_FH_1615", 
                 "checkpoints/OURS_LS_RH_8821", 
                 "checkpoints/OURS_MK_MS_4090", 
                 "checkpoints/OURS_SS_TM_1848"]
     
-    MODEL_GROUPS = [UNET_AWESOME, UNET_FULL, UNET, OURS]
-    MODEL_GROUP_NAMES = ["UNET_AWESOME", "UNET_FULL", "UNET", "OURS"]
+    OURS_SGD = ["checkpoints/OURS_CFCM_SGD_9607", 
+                "checkpoints/OURS_DDFH_SGD_1686", 
+                "checkpoints/OURS_LSRH_SGD_6499", 
+                "checkpoints/OURS_MKMS_SGD_1310", 
+                "checkpoints/OURS_SSTM_SGD_7481"]
+    
+    MODEL_GROUPS = [UNET_FULL, UNET, OURS, OURS_SGD]
+    MODEL_GROUP_NAMES = ["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
 
     evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', MODEL_GROUP_NAMES)
 
