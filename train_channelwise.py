@@ -131,11 +131,12 @@ def main():
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
         # Evaluate on Validation Set
+        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
+        visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
+        
         evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
 
         # Visualize Validation as well as Training Set examples
-        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
-        visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
 
         # Train the network
         train(train_loader, 
