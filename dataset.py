@@ -99,6 +99,7 @@ class SequenceHLEPlusPlus(Dataset):
         self.vocalfold_mask_dirs = [os.path.join(base_path, key, "vf_mask/") for key in keys]
 
 
+        self.batch_size = config['batch_size']
         self.sequence_length = config['sequence_length']
         self.transform = transform
         self.train_test_split = 0.9
@@ -155,6 +156,13 @@ class SequenceHLEPlusPlus(Dataset):
         return images, segmentation, keypoints'''
 
 
+    def reduce_list_to_fit_batchsize(self, list, batch_size):
+        if len(list) % batch_size != 0:
+            return list[:-(len(list) % batch_size)]
+        
+        return list
+
+    
     def make_list(self, dirs):
         list = []
         for dir in dirs:
@@ -166,6 +174,8 @@ class SequenceHLEPlusPlus(Dataset):
         return list
 
     def __len__(self):
+        dataset_size = len(self.images) - self.sequence_lenngth - 1
+        dataset_size -= (dataset_size % self.batch_size)
         return len(self.images) - self.sequence_length - 1
 
     def __getitem__(self, index):
