@@ -130,14 +130,6 @@ def main():
     A.save(val_transforms, CHECKPOINT_PATH + "/val_transform_sequence.yaml", data_format="yaml")
 
     for epoch in range(config['last_epoch'], config['num_epochs']):
-        # Evaluate on Validation Set
-        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
-        visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
-
-        evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
-
-        # Visualize Validation as well as Training Set examples
-
         # Train the network
         train(train_loader, 
                 loss, 
@@ -148,6 +140,14 @@ def main():
                 use_regression=epoch > config['keypoint_regularization_at'] - 1,
                 keypoint_lambda=config['keypoint_lambda'], 
                 log_wandb=False)
+
+        # Evaluate on Validation Set
+        evaluate(val_loader, model, cpu_loss, localizer=localizer if epoch > config['keypoint_regularization_at'] else None, epoch=epoch, log_wandb=LOG_WANDB)
+
+
+        # Visualize Validation as well as Training Set examples
+        visualize(val_loader, model, epoch, title="Val Predictions", log_wandb=LOG_WANDB)
+        visualize(train_loader, model, epoch, title="Train Predictions", log_wandb=LOG_WANDB)
 
         checkpoint = {"optimizer": optimizer.state_dict(), "scheduler": scheduler.state_dict()} | model.get_statedict()
         torch.save(checkpoint, CHECKPOINT_PATH + "/model.pth.tar")
