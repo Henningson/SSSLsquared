@@ -211,10 +211,15 @@ class SequenceHLEPlusPlus(Dataset):
                 seg = augmentations["masks"][0]
                 transformed_vf_mask = augmentations["masks"][1]
                 keypoints = augmentations["keypoints"]
-            
+
+
             # Pad keypoints, such that tensor have all the same size
             keypoints = torch.tensor(keypoints, dtype=torch.float32)
+
+            # Error handling, checking if keypoints are out of bounds
             if keypoints.nelement() != 0:
+                keypoints[keypoints[:, 0].long() >= 256] = torch.nan
+                keypoints[keypoints[:, 1].long() >= 512] = torch.nan
                 keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
             to_pad = self.pad_keypoints - keypoints.shape[0]
             keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
