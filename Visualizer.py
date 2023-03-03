@@ -49,6 +49,18 @@ class Visualize2D:
         for i in range(colored.shape[0]):
             self.plots[i].imshow(np.moveaxis(colored[i], 0, -1), cmap = 'gray', interpolation = 'bicubic', alpha=opacity)
 
+    def draw_segmenation_sequence(self, segmentations, num_classes, opacity=1.0):
+        segmentations = segmentations.detach().cpu().numpy()
+        for s in range(segmentations.shape[0]):
+            segmentation = segmentations[0]
+            colors = [np.array(cm.get_cmap(self.cmap)(i*(1/num_classes))[0:3]) for i in range(num_classes)]
+
+            colored = self.class_to_color(segmentation[None, :, :], colors)
+
+            for i in range(colored.shape[0]):
+                self.plots[s].imshow(np.moveaxis(colored[i], 0, -1), cmap = 'gray', interpolation = 'bicubic', alpha=opacity)
+
+
     def draw_sequence(self, images, axis=0):
         images_squeezed = images[axis, :, :, :].detach().cpu().numpy()
         for i in range(images_squeezed.shape[0]):

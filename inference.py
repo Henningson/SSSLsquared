@@ -8,7 +8,17 @@ import matplotlib.cm as cm
 import viewer
 from darktheme.widget_template import DarkPalette
 
+
+import os
+from PyQt5.QtCore import QLibraryInfo
+
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(
+    QLibraryInfo.PluginsPath
+)
+
 from PyQt5.QtWidgets import QApplication
+
+
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from dataset import HLEPlusPlus
@@ -38,7 +48,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/OURS_DDFH_SGD_1686/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/CHANNELDEPTH_MKMS_01_9662/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -52,7 +62,7 @@ def main():
     config = utils.load_config(os.path.join(checkpoint_path, "config.yml"))
     config['dataset_path'] = args.dataset_path
 
-    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
+    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform_sequence.yaml"), data_format='yaml') if config["model"] == "ChannelDepthUNet" else A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config, state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))).to(DEVICE)
@@ -60,7 +70,7 @@ def main():
     val_ds = dataset(config, is_train=False, transform=val_transforms)
 
     val_loader = DataLoader(val_ds, 
-                            batch_size=config['batch_size'],
+                            batch_size=config["batch_size"],
                             num_workers=2, 
                             pin_memory=True, 
                             shuffle=False)
@@ -71,6 +81,16 @@ def main():
                                 threshold = 0.5,
                                 device=DEVICE)
 
+
+    colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'] - 1)]
+    model.eval()
+
+    if config["model"] == "ChannelDepthUNet":
+        visChannelwise(val_loader, model, localizer, colors)
+    else:
+        vis(val_loader, model, localizer, colors)
+
+def vis(val_loader, model, localizer,  colors):
     video = []
 
     segmentations = []
@@ -79,19 +99,17 @@ def main():
 
     perFramePoints = []
     gt_points = []
-    colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'] - 1)]
 
-    model.eval()
     for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
-        prediction = model(images).softmax(dim=1)
+        if count > 15:
+            break
 
-        #import matplotlib.pyplot as plt
-        #bla = Visualizer.Visualize2D(x=6)
-        #bla.draw_heatmap(prediction, heatmapaxis=2)
-        #plt.show(block=True)
+        prediction = None
+        segmentation = None
+        prediction = model(images).softmax(dim=1)
 
         segmentation = prediction.argmax(dim=1)
 
@@ -126,7 +144,6 @@ def main():
             mean = mean[~np.isnan(mean).any(axis=1)]
             perFramePoints.append(mean)
 
-
     predictions_concat = np.concatenate(predictions, axis=0)
     video = np.moveaxis((np.concatenate(video, axis=0)*255).astype(np.uint8), 1, -1)
     segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
@@ -138,6 +155,85 @@ def main():
     mw = viewer.MainWindow(video, segmentations, gt_segmentations, error, perFramePoints, gt_points)
     mw.show()
     sys.exit(app.exec_())
+
+def visChannelwise(val_loader, model, localizer, colors):
+
+    video = []
+
+    segmentations = []
+    gt_segmentations = []
+    predictions = []
+
+    perFramePoints = []
+    gt_points = []
+
+    count = 0
+
+
+    dataloader_iterator = iter(val_loader)
+    for i in tqdm(range(len(val_loader))):
+        check_index = 0
+
+        images, gt_seg, keypoints = next(dataloader_iterator)
+        images = images.to(device=DEVICE)
+        gt_seg = gt_seg.to(device=DEVICE)
+        keypoints = keypoints
+
+        pred_seg = model(images)
+        softmax = pred_seg.softmax(dim=1)
+        segmentation = softmax.argmax(dim=1)
+
+        _, means, _ = localizer.estimate(softmax.flatten(0, 1), segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3).flatten(0, 1))
+
+        segmentation = segmentation.flatten(0, 1)
+        images = images.flatten(0, 1)
+        keypoints = keypoints.flatten(0, 1)
+        gt_seg = gt_seg.flatten(0, 1)
+
+        segmentation = torch.where(segmentation == 3, 2, segmentation)
+        gt_seg = torch.where(gt_seg == 3, 2, gt_seg)
+        segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
+        gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
+
+
+        min_val = images.cpu().detach().min(axis=-1)[0].min(axis=-1)[0]
+        max_val = images.cpu().detach().max(axis=-1)[0].max(axis=-1)[0]
+        normalized_images = (images.detach().cpu() - min_val.unsqueeze(-1).unsqueeze(-1)) / (max_val.unsqueeze(-1).unsqueeze(-1) - min_val.unsqueeze(-1).unsqueeze(-1))
+
+        #predictions.append(prediction.detach().cpu().numpy())
+        video.append(normalized_images.numpy())
+        segmentations.append(segmentation)
+        gt_segmentations.append(gt_seg)
+
+        for i in range(1):
+            cleaned_keypoints = keypoints[i][~torch.isnan(keypoints[i]).any(axis=1)]
+            gt_points.append((cleaned_keypoints[:, [1, 0]] - 1))
+
+        if means is None:
+            perFramePoints.append(np.zeros([0,2]))
+            print("Continuing")
+            continue
+
+        for mean in means:
+            mean = mean.cpu().detach().numpy()
+            mean = mean[~np.isnan(mean).any(axis=1)]
+            perFramePoints.append(mean)
+
+        count += 1
+
+
+    #predictions_concat = np.concatenate(predictions, axis=0)
+    video = np.repeat(np.expand_dims(np.concatenate(video, axis=0)*255, -1), 3, axis=-1).astype(np.uint8)
+    segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
+    gt_segmentations = (np.moveaxis(np.concatenate(gt_segmentations, axis=0), 1, -1)*255).astype(np.uint8)
+    error = (segmentations == gt_segmentations)*255
+
+    app = QApplication(sys.argv) 
+    app.setPalette(DarkPalette())
+    mw = viewer.MainWindow(video, segmentations, gt_segmentations, error, perFramePoints, gt_points)
+    mw.show()
+    sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,16 @@
+
+import os
+from PyQt5.QtCore import QLibraryInfo
+
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(
+    QLibraryInfo.PluginsPath
+)
+
 from PyQt5.QtGui import QPixmap, QTransform, QImage, qRgb
 from PyQt5.QtWidgets import QMainWindow, QGraphicsScene, QGraphicsView, QHBoxLayout, QWidget
 from PyQt5.QtCore import QSize, Qt
 from PyQt5.QtGui import QPen, QBrush, QColor
+
 import numpy as np
 
 
