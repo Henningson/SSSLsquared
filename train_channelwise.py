@@ -1,3 +1,11 @@
+
+import os
+from PyQt5.QtCore import QLibraryInfo
+
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(
+    QLibraryInfo.PluginsPath
+)
+
 import torch
 import albumentations as A
 from tqdm import tqdm
@@ -7,13 +15,9 @@ from torch.utils.data import DataLoader
 import LRscheduler
 import datetime
 import yaml
-#from evaluate import evaluate
 from printer import Printer
 import os
-import argparse
 import pygit2
-#import Visualizer
-import cv2
 import utils
 import Losses
 import ConfigArgsParser
