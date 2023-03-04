@@ -112,6 +112,7 @@ class Model(nn.Module):
         return {"Encoder": self.encoder.state_dict(),
                 "Bottleneck": self.bottleneck.state_dict(),
                 "DepthConv": self.depth_conv.state_dict(),
+                "ConvToChannel": self.conv_to_channel.state_dict(),
                 "Decoder": self.decoder.state_dict(),
                 "LastConv": self.final_conv.state_dict()}
 
@@ -119,6 +120,7 @@ class Model(nn.Module):
         self.encoder.load_state_dict(dict["Encoder"])
         self.bottleneck.load_state_dict(dict["Bottleneck"])
         self.decoder.load_state_dict(dict["Decoder"])
+        self.conv_to_channel.load_state_dict(dict["ConvToChannel"])
         try:
             self.final_conv.load_state_dict(dict["LastConv"])
         except:

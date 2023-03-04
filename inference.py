@@ -28,7 +28,7 @@ import Visualizer
 import sys
 sys.path.append("models/")
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"#"cuda" if torch.cuda.is_available() else "cpu"
 
 
 def class_to_color(prediction, class_colors):
@@ -48,7 +48,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/CHANNELDEPTH_MKMS_01_9662/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_7697/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -62,7 +62,7 @@ def main():
     config = utils.load_config(os.path.join(checkpoint_path, "config.yml"))
     config['dataset_path'] = args.dataset_path
 
-    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform_sequence.yaml"), data_format='yaml') if config["model"] == "ChannelDepthUNet" else A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
+    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform_sequence.yaml"), data_format='yaml') if config["model"] == "TwoDtoThreeDNet" else A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config, state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))).to(DEVICE)
@@ -85,7 +85,7 @@ def main():
     colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'] - 1)]
     model.eval()
 
-    if config["model"] == "ChannelDepthUNet":
+    if config["model"] == "ChannelDepthUNet" or config["model"] == "TwoDtoThreeDNet":
         visChannelwise(val_loader, model, localizer, colors)
     else:
         vis(val_loader, model, localizer, colors)
@@ -104,8 +104,6 @@ def vis(val_loader, model, localizer,  colors):
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
 
-        if count > 15:
-            break
 
         prediction = None
         segmentation = None
@@ -170,18 +168,15 @@ def visChannelwise(val_loader, model, localizer, colors):
     count = 0
 
 
-    dataloader_iterator = iter(val_loader)
-    for i in tqdm(range(len(val_loader))):
+    for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
         check_index = 0
-
-        images, gt_seg, keypoints = next(dataloader_iterator)
         images = images.to(device=DEVICE)
         gt_seg = gt_seg.to(device=DEVICE)
         keypoints = keypoints
 
-        pred_seg = model(images)
-        softmax = pred_seg.softmax(dim=1)
-        segmentation = softmax.argmax(dim=1)
+        pred_seg = model(images).moveaxis(1, 2)
+        softmax = pred_seg.softmax(dim=2)
+        segmentation = softmax.argmax(dim=2)
 
         _, means, _ = localizer.estimate(softmax.flatten(0, 1), segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3).flatten(0, 1))
 

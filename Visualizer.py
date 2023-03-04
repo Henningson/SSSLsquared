@@ -77,6 +77,7 @@ class Visualize2D:
             cpu_points = points
             self.plots[count].scatter(cpu_points[:, 1], cpu_points[:, 0], color=color)
 
+
     def draw_heatmap(self, heat, heatmapaxis=0, opacity=1.0):
         heatmap_squeezed = heat[:, heatmapaxis, :, :].detach().cpu().numpy()
         for i in range(heatmap_squeezed.shape[0]):
