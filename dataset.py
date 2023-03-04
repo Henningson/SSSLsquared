@@ -319,6 +319,8 @@ class HLEPlusPlus(Dataset):
         # Pad keypoints, such that tensor have all the same size
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
         if keypoints.nelement() != 0:
+            keypoints[keypoints[:, 0].long() >= 256] = 0.0
+            keypoints[keypoints[:, 1].long() >= 512] = 0.0
             keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
         to_pad = self.pad_keypoints - keypoints.shape[0]
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
@@ -439,6 +441,8 @@ class SBHLEPlusPlus(HLEPlusPlus):
         # Pad keypoints, such that tensor have all the same size
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
         if keypoints.nelement() != 0:
+            keypoints[keypoints[:, 0].long() >= 256] = 0.0
+            keypoints[keypoints[:, 1].long() >= 512] = 0.0
             keypoints[transformed_vf_mask[keypoints[:, 1].long(), keypoints[:, 0].long()] == 0] = torch.nan
         to_pad = self.pad_keypoints - keypoints.shape[0]
         keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
