@@ -111,7 +111,6 @@ class Model(nn.Module):
         return {"Encoder": self.encoder.state_dict(),
                 "Bottleneck": self.bottleneck.state_dict(),
                 "BottleneckConv": self.bottleneck_conv.state_dict(),
-                "DepthConv": self.depth_conv.state_dict(),
                 "Decoder": self.decoder.state_dict(),
                 "LastConv": self.final_conv.state_dict()}
 
@@ -124,11 +123,6 @@ class Model(nn.Module):
             self.final_conv.load_state_dict(dict["LastConv"])
         except:
             print("Final conv not initialized.")
-
-        try:
-            self.depth_conv.load_state_dict(dict["DepthConv"])
-        except:
-            print("3D Depth Convolution not initialized.")
 
     def forward(self, x):
         x = self.encoder(x)
