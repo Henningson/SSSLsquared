@@ -172,6 +172,204 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     return float(precision), float(f1), float(nme), float(total_IOU), float(total_dice), float((inference_time + point_detection_time) / num_images), float(total_CHAM)
 
 
+class BaseMetric:
+    def __init__(self, is_keypoint_metric = False):
+        self.is_keypoint_metric = is_keypoint_metric
+        self.running_average = 0.0
+        self.num_datapoints = 0
+
+    def isKeypointMetric(self):
+        return self.is_keypoint_metric
+
+    def compute(self, prediction, target) -> float:
+        # TODO: Implement me
+        return None
+
+    def get_final_score(self):
+        return self.running_average / self.num_datapoints
+
+
+class DiceMetric(BaseMetric):
+    def __init__(self, num_classes=4):
+        super().__init__(is_keypoint_metric = False)
+        self.num_classes = num_classes
+        self.name = "DICE"
+
+    def compute(self, prediction, target) -> float:
+        score = dice(prediction, target, num_classes=self.num_classes, ignore_index=0)
+        self.running_average += score
+        self.num_datapoints += 1
+        return score
+
+
+class JaccardIndexMetric(BaseMetric):
+    def __init__(self, num_classes=4):
+        super().__init__(is_keypoint_metric = False)
+        self.num_classes = num_classes
+        self.name = "IoU"
+
+    def compute(self, prediction, target) -> float:
+        score = jaccard_index(prediction, target, num_classes=self.num_classes, ignore_index=0)
+        self.running_average += score
+        self.num_datapoints += 1
+        return score
+    
+
+class F1ScoreMetric(BaseMetric):
+    def __init__(self, outlier_threshold=2.0, prediction_format="yx", target_format="yx"):
+        super().__init__(is_keypoint_metric = True)
+        self.outlier_threshold = outlier_threshold
+        self.prediction_format = prediction_format
+        self.target_format = target_format
+        self.TOTAL_TP = 0
+        self.TOTAL_FP = 0
+        self.TOTAL_TN = 0
+        self.TOTAL_FN = 0
+        self.name = "F1-Score"
+
+    def compute(self, prediction, target) -> float:
+        TP, FP, FN, _ = metrics_dom.keypoint_statistics(prediction, target, 
+                                                        self.outlier_threshold, 
+                                                        prediction_format=self.prediction_format, 
+                                                        target_format=self.target_format)
+        self.TOTAL_TP += TP
+        self.TOTAL_FP += FP
+        self.TOTAL_FN += FN
+        self.num_datapoints += 1
+        return metrics_dom.f1_score(TP, FP, FN)
+
+
+    def get_final_score(self):
+        return metrics_dom.f1_score(self.TOTAL_TP, self.TOTAL_FP, self.TOTAL_FN)
+
+
+class PrecisionMetric(BaseMetric):
+    def __init__(self, outlier_threshold=2.0, prediction_format="yx", target_format="yx"):
+        super().__init__(is_keypoint_metric = True)
+        self.outlier_threshold = outlier_threshold
+        self.prediction_format = prediction_format
+        self.target_format = target_format
+        self.TOTAL_TP = 0
+        self.TOTAL_FP = 0
+        self.TOTAL_TN = 0
+        self.TOTAL_FN = 0
+        self.name = "Precision"
+
+    def compute(self, prediction, target) -> float:
+        TP, FP, FN, _ = metrics_dom.keypoint_statistics(prediction, target, 
+                                                        self.outlier_threshold, 
+                                                        prediction_format=self.prediction_format, 
+                                                        target_format=self.target_format)
+        self.TOTAL_TP += TP
+        self.TOTAL_FP += FP
+        self.TOTAL_FN += FN
+        self.num_datapoints += 1
+        return metrics_dom.precision(TP, FP, FN)
+
+
+    def get_final_score(self):
+        return metrics_dom.precision(self.TOTAL_TP, self.TOTAL_FP, self.TOTAL_FN)
+
+
+class NMEMetric(BaseMetric):
+    def __init__(self, outlier_threshold=2.0, prediction_format="yx", target_format="yx"):
+        super().__init__(is_keypoint_metric = True)
+        self.outlier_threshold = outlier_threshold
+        self.prediction_format = prediction_format
+        self.target_format = target_format
+        self.total_l2_distances = []
+        self.name = "NME"
+
+    def compute(self, prediction, target) -> float:
+        _, _, _, inlier_distances = metrics_dom.keypoint_statistics(prediction, target, 
+                                                        self.outlier_threshold, 
+                                                        prediction_format=self.prediction_format, 
+                                                        target_format=self.target_format)
+        
+        self.total_l2_distances = self.total_l2_distances + inlier_distances
+
+        return sum(inlier_distances) / len(inlier_distances)
+
+
+    def get_final_score(self):
+        return sum(self.total_l2_distances) / len(self.total_l2_distances)
+
+
+class BaseEvaluator:
+    def __init__(self, model, val_loader, localizer, config, metrics):
+        self.model = model
+        self.val_loader = val_loader
+        self.config = config
+        self.metrics = metrics
+        self.localizer = localizer
+        self.running_metrics = None
+
+    def evaluate(self):
+        loop = tqdm(self.val_loader, desc="Evaluation")
+        for images, gt_seg, keypoints in loop:
+            images = images.to(device=DEVICE)
+            gt_seg = gt_seg.to(device=DEVICE).long()
+            
+            keypoints = keypoints.float().split(1, dim=0)
+            keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
+
+            prediction = self.model(images).softmax(dim=1)
+            segmentation = prediction.argmax(dim=1)
+            _, means, _ = self.localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+
+            metric_dict = {}
+            for metric in self.metrics:
+                if metric.isKeypointMetric():
+                    metric_dict[metric.name] = metric.compute(means, keypoints)
+                else:
+                    metric_dict[metric.name] = metric.compute(segmentation, gt_seg)
+            
+            loop.set_postfix(metric_dict)
+
+    def get_final_metrics(self):
+        return [metric.get_final_score() for metric in self.metrics]
+
+
+class Evaluator2D3D:
+    def __init__(self, model, val_loader, localizer, config, metrics):
+        self.model = model
+        self.val_loader = val_loader
+        self.config = config
+        self.metrics = metrics
+        self.localizer = localizer
+        self.running_metrics = None
+
+
+    def evaluate(self):
+        loop = tqdm(self.val_loader, desc="Evaluation")
+        for images, gt_seg, keypoints in loop:
+            if images.shape[0] != self.config["batch_size"]*self.config["sequence_length"]:
+                    continue
+
+            images = images.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], images.shape[-2], images.shape[-1])
+            gt_seg = gt_seg.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], gt_seg.shape[-2], gt_seg.shape[-1]).long()
+            keypoints = keypoints.reshape(self.config["batch_size"]*self.config["sequence_length"], keypoints.shape[-2], keypoints.shape[-1])
+            keypoints = keypoints.float().split(1, dim=0)
+            keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
+
+            pred_seg = self.model(images).moveaxis(1, 2)
+            softmax = pred_seg.softmax(dim=2)
+            segmentation = softmax.argmax(dim=2)
+            _, means, _ = self.localizer.estimate(softmax.flatten(0, 1), segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3).flatten(0, 1))
+
+            metric_dict = {}
+            for metric in self.metrics:
+                if metric.isKeypointMetric():
+                    metric_dict[metric.name] = metric.compute(means, keypoints)
+                else:
+                    metric_dict[metric.name] = metric.compute(segmentation, gt_seg)
+            
+            loop.set_postfix(metric_dict)
+
+    def get_final_metrics(self):
+        return [metric.get_final_score() for metric in self.metrics]
+
+
 
 # Input list of every model path that should be checked inside a class
 # For example [[UNET_A, UNET_B, UNET_C], [OURS_A, OURS_B, OURS_C], [..]]
@@ -181,8 +379,6 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
     for MODEL_GROUP in checkpoints:
         per_model_evals = []
         for CHECKPOINT_PATH in MODEL_GROUP:
-            loss = torch.nn.CrossEntropyLoss()
-
             if CHECKPOINT_PATH == "" or not os.path.isdir(CHECKPOINT_PATH):
                 print("\033[93m" + "Please provide a viable checkpoint path")
 
@@ -192,32 +388,51 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
             neuralNet = __import__(config["model"])
             model = neuralNet.Model(config, state_dict=torch.load(os.path.join(CHECKPOINT_PATH, "model.pth.tar"))).to(DEVICE)
             dataset = __import__('dataset').__dict__[config['dataset_name']]
-            val_ds = dataset(config, is_train=False, transform=val_transforms)
 
+    
+            try:
+                old_sequence_length = config["sequence_length"]
+                config["sequence_length"] = 1
+            except:
+                old_sequence_length = 1
+                config["sequence_length"] = 1
+
+
+            val_ds = dataset(config, is_train=False, transform=val_transforms)
             val_loader = DataLoader(val_ds, 
-                                    batch_size=config['batch_size'],
+                                    batch_size=config["batch_size"]*old_sequence_length,
                                     num_workers=2, 
                                     pin_memory=True, 
                                     shuffle=False)
             
-            localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
+            localizer = LSQLocalization(local_maxima_window = 11, 
                                         gauss_window = config["gauss_window"], 
                                         heatmapaxis = config["heatmapaxis"], 
                                         threshold = 0.5,
                                         device=DEVICE)
-            with torch.no_grad():
+            
+            config["sequence_length"] = old_sequence_length
+            evaluator = None
+            metrics = [PrecisionMetric(), F1ScoreMetric(), NMEMetric(), DiceMetric(), JaccardIndexMetric()]
 
+            if config["model"] == "TwoDtoThreeDNet":
+                evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
+            else:
+                evaluator = BaseEvaluator(model, val_loader, localizer, config, metrics)
+
+
+            with torch.no_grad():
                 print("#"*20)
                 print("#"*3 + " " + CHECKPOINT_PATH + " " + "#"*3)
                 print("#"*20)
+                evaluator.evaluate()
 
-                evals = evaluate(val_loader, model, loss, localizer=localizer)
-                per_model_evals.append(evals)
+                per_model_evals.append(evaluator.get_final_metrics())
         group_evals.append(per_model_evals)
 
     for group_name, group_scores in zip(group_names, group_evals):
         print("############" + group_name + "############")
-        print("Precision, F1-Score, NME, IoU, DICE, Inference-Speed")
+        print("Precision, F1-Score, NME, DICE, IoU")
         print(torch.tensor(group_scores).mean(dim=0))
         print(torch.tensor(group_scores).std(dim=0))
         print()
@@ -225,32 +440,32 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
 
 def main():
-    UNET_FULL = ["checkpoints/UNETFULL_CF_CM_7916", 
-                    "checkpoints/UNETFULL_DD_FH_559", 
-                    "checkpoints/UNETFULL_LS_RH_2342", 
-                    "checkpoints/UNETFULL_MK_MS_705", 
-                    "checkpoints/UNETFULL_SS_TM_2398"]
+    UNET_FULL = ["checkpoints/UNETFULL_CFCM_2558", 
+                    "checkpoints/UNETFULL_DDFH_1010", 
+                    #"checkpoints/UNETFULL_LS_RH_2342", 
+                    "checkpoints/UNETFULL_MKMS_9400", 
+                    "checkpoints/UNETFULL_SSTM_5445"]
     
-    UNET = ["checkpoints/UNET_CF_CM_3052", 
-                "checkpoints/UNET_DD_FH_4761", 
-                "checkpoints/UNET_LS_RH_2302", 
-                "checkpoints/UNET_MK_MS_3426",
-                "checkpoints/UNET_SS_TM_7862"]
+    # UNET = ["checkpoints/UNET_CF_CM_3052", 
+    #             "checkpoints/UNET_DD_FH_4761", 
+    #             "checkpoints/UNET_LS_RH_2302", 
+    #             "checkpoints/UNET_MK_MS_3426",
+    #             "checkpoints/UNET_SS_TM_7862"]
     
-    OURS = ["checkpoints/OURS_CF_CM_6511", 
-                "checkpoints/OURS_DD_FH_1615", 
-                "checkpoints/OURS_LS_RH_8821", 
-                "checkpoints/OURS_MK_MS_4090", 
-                "checkpoints/OURS_SS_TM_1848"]
+    OURS = ["checkpoints/2D3D_CFCM_01_9160", 
+                "checkpoints/2D3D_DDFH_01_3749", 
+                "checkpoints/2D3D_LSRH_01_6746", 
+                "checkpoints/2D3D_MKMS_01_3279", 
+                "checkpoints/2D3D_SSTM_01_650"]
     
-    OURS_SGD = ["checkpoints/OURS_CFCM_SGD_9607", 
-                "checkpoints/OURS_DDFH_SGD_1686", 
-                "checkpoints/OURS_LSRH_SGD_6499", 
-                "checkpoints/OURS_MKMS_SGD_1310", 
-                "checkpoints/OURS_SSTM_SGD_7481"]
+    #OURS_SGD = ["checkpoints/OURS_CFCM_SGD_9607", 
+    #            "checkpoints/OURS_DDFH_SGD_1686", 
+    #            "checkpoints/OURS_LSRH_SGD_6499", 
+    #            "checkpoints/OURS_MKMS_SGD_1310", 
+    #            "checkpoints/OURS_SSTM_SGD_7481"]
     
-    MODEL_GROUPS = [UNET_FULL, UNET, OURS, OURS_SGD]
-    MODEL_GROUP_NAMES = ["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
+    MODEL_GROUPS = [UNET_FULL, OURS]#[UNET_FULL, UNET, OURS, OURS_SGD]
+    MODEL_GROUP_NAMES = ["UNET_FULL", "OURS"]#["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
 
     evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', MODEL_GROUP_NAMES)
 

@@ -28,7 +28,7 @@ import Visualizer
 import sys
 sys.path.append("models/")
 
-DEVICE = "cpu"#"cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def class_to_color(prediction, class_colors):
@@ -48,7 +48,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_7697/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNETFULL_SSTM_5445/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -62,20 +62,29 @@ def main():
     config = utils.load_config(os.path.join(checkpoint_path, "config.yml"))
     config['dataset_path'] = args.dataset_path
 
-    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform_sequence.yaml"), data_format='yaml') if config["model"] == "TwoDtoThreeDNet" else A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
+    val_transforms = A.load(os.path.join(checkpoint_path, "val_transform.yaml"), data_format='yaml')
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config, state_dict=torch.load(os.path.join(checkpoint_path, "model.pth.tar"))).to(DEVICE)
     dataset = __import__('dataset').__dict__[config['dataset_name']]
-    val_ds = dataset(config, is_train=False, transform=val_transforms)
+    
+    
+    try:
+        old_sequence_length = config["sequence_length"]
+        config["sequence_length"] = 1
+    except:
+        old_sequence_length = 1
+        config["sequence_length"] = 1
 
+
+    val_ds = dataset(config, is_train=False, transform=val_transforms)
     val_loader = DataLoader(val_ds, 
-                            batch_size=config["batch_size"],
+                            batch_size=config["batch_size"]*old_sequence_length,
                             num_workers=2, 
                             pin_memory=True, 
                             shuffle=False)
-    
-    localizer = LSQLocalization(local_maxima_window = config["maxima_window"], 
+
+    localizer = LSQLocalization(local_maxima_window = 7, 
                                 gauss_window = config["gauss_window"], 
                                 heatmapaxis = config["heatmapaxis"], 
                                 threshold = 0.5,
@@ -86,7 +95,7 @@ def main():
     model.eval()
 
     if config["model"] == "ChannelDepthUNet" or config["model"] == "TwoDtoThreeDNet":
-        visChannelwise(val_loader, model, localizer, colors)
+        visChannelwise(val_loader, model, localizer, config["batch_size"], old_sequence_length, colors)
     else:
         vis(val_loader, model, localizer, colors)
 
@@ -95,8 +104,6 @@ def vis(val_loader, model, localizer,  colors):
 
     segmentations = []
     gt_segmentations = []
-    predictions = []
-
     perFramePoints = []
     gt_points = []
 
@@ -124,14 +131,13 @@ def vis(val_loader, model, localizer,  colors):
         max_val = images.cpu().detach().max(axis=-1)[0].max(axis=-1)[0]
         normalized_images = (images.detach().cpu() - min_val.unsqueeze(-1).unsqueeze(-1)) / (max_val.unsqueeze(-1).unsqueeze(-1) - min_val.unsqueeze(-1).unsqueeze(-1))
 
-        predictions.append(prediction.detach().cpu().numpy())
         video.append(normalized_images.numpy())
         segmentations.append(segmentation)
         gt_segmentations.append(gt_seg)
 
         for i in range(images.shape[0]):
             cleaned_keypoints = keypoints[i][~torch.isnan(keypoints[i]).any(axis=1)]
-            gt_points.append(cleaned_keypoints[:, [1, 0]] - 1)
+            gt_points.append(cleaned_keypoints[:, [1, 0]])
 
         if means is None:
             perFramePoints.append(np.zeros([0,2]))
@@ -142,7 +148,6 @@ def vis(val_loader, model, localizer,  colors):
             mean = mean[~np.isnan(mean).any(axis=1)]
             perFramePoints.append(mean)
 
-    predictions_concat = np.concatenate(predictions, axis=0)
     video = np.moveaxis((np.concatenate(video, axis=0)*255).astype(np.uint8), 1, -1)
     segmentations = (np.moveaxis(np.concatenate(segmentations, axis=0), 1, -1)*255).astype(np.uint8)
     gt_segmentations = (np.moveaxis(np.concatenate(gt_segmentations, axis=0), 1, -1)*255).astype(np.uint8)
@@ -154,7 +159,7 @@ def vis(val_loader, model, localizer,  colors):
     mw.show()
     sys.exit(app.exec_())
 
-def visChannelwise(val_loader, model, localizer, colors):
+def visChannelwise(val_loader, model, localizer, batch_size, sequence_length, colors):
 
     video = []
 
@@ -165,14 +170,13 @@ def visChannelwise(val_loader, model, localizer, colors):
     perFramePoints = []
     gt_points = []
 
-    count = 0
-
-
     for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
-        check_index = 0
-        images = images.to(device=DEVICE)
-        gt_seg = gt_seg.to(device=DEVICE)
-        keypoints = keypoints
+        if images.shape[0] != batch_size*sequence_length:
+            continue
+
+        images = images.to(device=DEVICE).reshape(batch_size, sequence_length, images.shape[-2], images.shape[-1])
+        gt_seg = gt_seg.to(device=DEVICE).reshape(batch_size, sequence_length, gt_seg.shape[-2], gt_seg.shape[-1])
+        keypoints = keypoints.reshape(batch_size, sequence_length, keypoints.shape[-2], keypoints.shape[-1])
 
         pred_seg = model(images).moveaxis(1, 2)
         softmax = pred_seg.softmax(dim=2)
@@ -190,7 +194,6 @@ def visChannelwise(val_loader, model, localizer, colors):
         segmentation = class_to_color(segmentation.detach().cpu().numpy(), colors)
         gt_seg = class_to_color(gt_seg.detach().cpu().numpy(), colors)
 
-
         min_val = images.cpu().detach().min(axis=-1)[0].min(axis=-1)[0]
         max_val = images.cpu().detach().max(axis=-1)[0].max(axis=-1)[0]
         normalized_images = (images.detach().cpu() - min_val.unsqueeze(-1).unsqueeze(-1)) / (max_val.unsqueeze(-1).unsqueeze(-1) - min_val.unsqueeze(-1).unsqueeze(-1))
@@ -200,8 +203,9 @@ def visChannelwise(val_loader, model, localizer, colors):
         segmentations.append(segmentation)
         gt_segmentations.append(gt_seg)
 
-        for i in range(1):
+        for i in range(keypoints.shape[0]):
             cleaned_keypoints = keypoints[i][~torch.isnan(keypoints[i]).any(axis=1)]
+            #print(cleaned_keypoints.shape)
             gt_points.append((cleaned_keypoints[:, [1, 0]] - 1))
 
         if means is None:
@@ -214,7 +218,6 @@ def visChannelwise(val_loader, model, localizer, colors):
             mean = mean[~np.isnan(mean).any(axis=1)]
             perFramePoints.append(mean)
 
-        count += 1
 
 
     #predictions_concat = np.concatenate(predictions, axis=0)

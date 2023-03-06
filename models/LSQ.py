@@ -71,9 +71,9 @@ def GuosBatchAnalytic(x, y, z):
     A = (A.transpose(1, 2) * weights.unsqueeze(1)).transpose(1, 2)
     b = (torch.log(z) * weights)
     ATA = (A.transpose(1, 2) @ A).float()
-    #c = (torch.linalg.lstsq(ATA, A.transpose(1, 2)).solution @ b.unsqueeze(-1)).squeeze()
+    c = (torch.linalg.lstsq(ATA, A.transpose(1, 2)).solution @ b.unsqueeze(-1)).squeeze()
     #c = (torch.linalg.pinv(ATA) @ A.transpose(1, 2) @ b.unsqueeze(-1)).squeeze()
-    c = (ATA.inverse() @ A.transpose(1, 2) @ b.unsqueeze(-1)).squeeze()
+    #c = (ATA.inverse() @ A.transpose(1, 2) @ b.unsqueeze(-1)).squeeze()
 
     if len(c.shape) == 1:
         c = c.unsqueeze(0)
@@ -119,7 +119,7 @@ class LSQLocalization:
 
         # Generate thresholded image
         threshed_heat = (heat > self.threshold) * heat
-        threshed_heat = kornia.filters.gaussian_blur2d(threshed_heat, self.kernel.shape, [self.kernel.shape[0]/4, self.kernel.shape[0]/4])
+        #threshed_heat = kornia.filters.gaussian_blur2d(threshed_heat, self.kernel.shape, [self.kernel.shape[0]/4, self.kernel.shape[0]/4])
         
 
         # Use dilation filtering to generate local maxima and squeeze first dimension
