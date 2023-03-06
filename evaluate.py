@@ -243,6 +243,35 @@ class F1ScoreMetric(BaseMetric):
         return metrics_dom.f1_score(self.TOTAL_TP, self.TOTAL_FP, self.TOTAL_FN)
 
 
+
+class AveragePrecisionMetric(BaseMetric):
+    def __init__(self, outlier_threshold=2.0, prediction_format="yx", target_format="yx"):
+        super().__init__(is_keypoint_metric = True)
+        self.outlier_threshold = outlier_threshold
+        self.prediction_format = prediction_format
+        self.target_format = target_format
+        self.TOTAL_TP = 0
+        self.TOTAL_FP = 0
+        self.TOTAL_TN = 0
+        self.TOTAL_FN = 0
+        self.name = "Precision"
+
+    def compute(self, prediction, target) -> float:
+        TP, FP, FN, _ = metrics_dom.keypoint_statistics(prediction, target, 
+                                                        self.outlier_threshold, 
+                                                        prediction_format=self.prediction_format, 
+                                                        target_format=self.target_format)
+        self.TOTAL_TP += TP
+        self.TOTAL_FP += FP
+        self.TOTAL_FN += FN
+        self.num_datapoints += 1
+        return metrics_dom.average_precision(TP, FP, FN)
+
+
+    def get_final_score(self):
+        return metrics_dom.average_precision(self.TOTAL_TP, self.TOTAL_FP, self.TOTAL_FN)
+    
+
 class PrecisionMetric(BaseMetric):
     def __init__(self, outlier_threshold=2.0, prediction_format="yx", target_format="yx"):
         super().__init__(is_keypoint_metric = True)
@@ -295,6 +324,26 @@ class NMEMetric(BaseMetric):
         return sum(self.total_l2_distances) / len(self.total_l2_distances)
 
 
+class ChamferMetric(BaseMetric):
+    def __init__(self):
+        super().__init__(is_keypoint_metric = True)
+        self.name = "Chamfer"
+        self.chamf = ChamferDistance()
+
+    def compute(self, prediction, target) -> float:
+        count = 0 
+        current_average = 0
+        for i in range(len(prediction)):
+            chamferdist = self.chamf(prediction[i].unsqueeze(0), target[i].unsqueeze(0), bidirectional=True) / torch.sqrt(torch.tensor(512*512 + 256*256))
+            count += 1
+            current_average += chamferdist 
+            
+            self.running_average += chamferdist
+            self.num_datapoints += 1
+
+        return current_average / count
+
+
 class BaseEvaluator:
     def __init__(self, model, val_loader, localizer, config, metrics):
         self.model = model
@@ -309,6 +358,7 @@ class BaseEvaluator:
         for images, gt_seg, keypoints in loop:
             images = images.to(device=DEVICE)
             gt_seg = gt_seg.to(device=DEVICE).long()
+            keypoints = keypoints.to(device=DEVICE)
             
             keypoints = keypoints.float().split(1, dim=0)
             keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
@@ -348,7 +398,7 @@ class Evaluator2D3D:
 
             images = images.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], images.shape[-2], images.shape[-1])
             gt_seg = gt_seg.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], gt_seg.shape[-2], gt_seg.shape[-1]).long()
-            keypoints = keypoints.reshape(self.config["batch_size"]*self.config["sequence_length"], keypoints.shape[-2], keypoints.shape[-1])
+            keypoints = keypoints.to(device=DEVICE).reshape(self.config["batch_size"]*self.config["sequence_length"], keypoints.shape[-2], keypoints.shape[-1])
             keypoints = keypoints.float().split(1, dim=0)
             keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
 
@@ -413,7 +463,7 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
             
             config["sequence_length"] = old_sequence_length
             evaluator = None
-            metrics = [PrecisionMetric(), F1ScoreMetric(), NMEMetric(), DiceMetric(), JaccardIndexMetric()]
+            metrics = [AveragePrecisionMetric(), PrecisionMetric(), F1ScoreMetric(), NMEMetric(), ChamferMetric(), DiceMetric(), JaccardIndexMetric()]
 
             if config["model"] == "TwoDtoThreeDNet":
                 evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
@@ -432,7 +482,7 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
     for group_name, group_scores in zip(group_names, group_evals):
         print("############" + group_name + "############")
-        print("Precision, F1-Score, NME, DICE, IoU")
+        print("AveragePrecision, Precision, F1-Score, NME, Chamfer, DICE, IoU")
         print(torch.tensor(group_scores).mean(dim=0))
         print(torch.tensor(group_scores).std(dim=0))
         print()
