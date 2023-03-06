@@ -234,7 +234,7 @@ class SequenceHLEPlusPlus(Dataset):
             to_pad = self.pad_keypoints - keypoints.shape[0]
             keypoints = torch.concat([keypoints, torch.zeros((to_pad, 2))], dim=0)
             keypoints[(keypoints == 0.0)] = torch.nan
-            #keypoints -= np.array([[1.0, 1.0]])
+            keypoints -= np.array([[1.0, 1.0]])
 
             image_list.append(image)
             gt_segmentation_list.append(seg)

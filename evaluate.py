@@ -13,6 +13,8 @@ import math
 from torchmetrics.functional import dice, jaccard_index
 import wandb
 import metrics_dom
+import math
+
 from typing import List, Union, Tuple, Optional
 from chamferdist import ChamferDistance
 
@@ -335,6 +337,9 @@ class ChamferMetric(BaseMetric):
         current_average = 0
         for i in range(len(prediction)):
             chamferdist = self.chamf(prediction[i].unsqueeze(0), target[i].unsqueeze(0), bidirectional=True) / torch.sqrt(torch.tensor(512*512 + 256*256))
+            if math.isnan(chamferdist):
+                continue
+
             count += 1
             current_average += chamferdist 
             
@@ -455,15 +460,15 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
                                     pin_memory=True, 
                                     shuffle=False)
             
-            localizer = LSQLocalization(local_maxima_window = 11, 
+            localizer = LSQLocalization(local_maxima_window = 7, 
                                         gauss_window = config["gauss_window"], 
                                         heatmapaxis = config["heatmapaxis"], 
-                                        threshold = 0.5,
+                                        threshold = 0.7,
                                         device=DEVICE)
             
             config["sequence_length"] = old_sequence_length
             evaluator = None
-            metrics = [AveragePrecisionMetric(), PrecisionMetric(), F1ScoreMetric(), NMEMetric(), ChamferMetric(), DiceMetric(), JaccardIndexMetric()]
+            metrics = [PrecisionMetric(), F1ScoreMetric(), NMEMetric(), DiceMetric(), JaccardIndexMetric()]
 
             if config["model"] == "TwoDtoThreeDNet":
                 evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
@@ -482,7 +487,7 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
     for group_name, group_scores in zip(group_names, group_evals):
         print("############" + group_name + "############")
-        print("AveragePrecision, Precision, F1-Score, NME, Chamfer, DICE, IoU")
+        print("Precision, F1-Score, NME, DICE, IoU")
         print(torch.tensor(group_scores).mean(dim=0))
         print(torch.tensor(group_scores).std(dim=0))
         print()
