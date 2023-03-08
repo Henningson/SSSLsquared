@@ -423,24 +423,90 @@ class Evaluator2D3D:
 
     def get_final_metrics(self):
         return [metric.get_final_score() for metric in self.metrics]
+    
 
-
-class BaseInferenceEvaluator:
-    def __init__(self, model, val_loader, localizer, config, metrics, warm_up = 3):
+class InferenceTimer2D3D:
+    def __init__(self, model, val_loader, localizer, config, warm_up = 3):
         self.model = model
         self.val_loader = val_loader
         self.config = config
-        self.metrics = metrics
         self.localizer = localizer
-        self.warm_up = 3
-
+        self.warm_up = warm_up
 
         self.total_inference_time = 0.0
         self.total_point_prediction_time = 0.0
-        self.total_time = 0.0
+        self.num_images = 0
+
+    def start_timer(self):
+        self.timer_start = torch.cuda.Event(enable_timing=True)
+        self.timer_end = torch.cuda.Event(enable_timing=True)
+        self.timer_start.record()
+
+    def stop_timer(self):
+        self.timer_end.record()
+        torch.cuda().synchronize()
+        return self.timer_start.elapsed_time(self.timer_end)
 
     def evaluate(self):
         loop = tqdm(self.val_loader, desc="Evaluation")
+        count = 0
+        for images, gt_seg, keypoints in loop:
+            if images.shape[0] != self.config["batch_size"]*self.config["sequence_length"]:
+                    continue
+
+            images = images.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], images.shape[-2], images.shape[-1])
+            gt_seg = gt_seg.to(device=DEVICE).reshape(self.config["batch_size"], self.config["sequence_length"], gt_seg.shape[-2], gt_seg.shape[-1]).long()
+            keypoints = keypoints.to(device=DEVICE).reshape(self.config["batch_size"]*self.config["sequence_length"], keypoints.shape[-2], keypoints.shape[-1])
+            keypoints = keypoints.float().split(1, dim=0)
+            keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
+
+            self.start_timer()
+            pred_seg = self.model(images).moveaxis(1, 2)
+            softmax = pred_seg.softmax(dim=2)
+            segmentation = softmax.argmax(dim=2)
+            inference_time = self.stop_timer()
+
+            self.start_timer()
+            _, means, _ = self.localizer.estimate(softmax.flatten(0, 1), segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3).flatten(0, 1))
+            point_detection_time = self.stop_timer()
+
+
+
+            if count > self.warm_up:
+                self.num_images += pred_seg.flatten(0, 1).shape[0]
+                self.total_inference_time += inference_time
+                self.total_point_prediction_time += point_detection_time
+
+    def get_total_time(self):
+        return (self.total_inference_time + self.total_point_prediction_time) / self.num_images
+
+
+
+class BaseInferenceTimer:
+    def __init__(self, model, val_loader, localizer, config, warm_up = 3):
+        self.model = model
+        self.val_loader = val_loader
+        self.config = config
+        self.localizer = localizer
+        self.warm_up = warm_up
+
+        self.total_inference_time = 0.0
+        self.total_point_prediction_time = 0.0
+        self.num_images = 0
+
+    def start_timer(self):
+        self.timer_start = torch.cuda.Event(enable_timing=True)
+        self.timer_end = torch.cuda.Event(enable_timing=True)
+        self.timer_start.record()
+
+    def stop_timer(self):
+        self.timer_end.record()
+        torch.cuda().synchronize()
+        return self.timer_start.elapsed_time(self.timer_end)
+
+    def evaluate(self):
+        loop = tqdm(self.val_loader, desc="Evaluation")
+        count = 0
         for images, gt_seg, keypoints in loop:
             images = images.to(device=DEVICE)
             gt_seg = gt_seg.to(device=DEVICE).long()
@@ -449,26 +515,35 @@ class BaseInferenceEvaluator:
             keypoints = keypoints.float().split(1, dim=0)
             keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
 
+            self.start_timer()
             prediction = self.model(images).softmax(dim=1)
             segmentation = prediction.argmax(dim=1)
-            _, means, _ = self.localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+            inference_time = self.stop_timer()
 
-            metric_dict = {}
-            for metric in self.metrics:
-                if metric.isKeypointMetric():
-                    metric_dict[metric.name] = metric.compute(means, keypoints)
-                else:
-                    metric_dict[metric.name] = metric.compute(segmentation, gt_seg)
+            self.start_timer()
+            _, means, _ = self.localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+            point_detection_time = self.stop_timer()
             
-            loop.set_postfix(metric_dict)
+            count += 1
+            loop.set_postfix("Inf. Time: {0:04f}, Loc. Time: {1:04f}".format(inference_time, point_detection_time))
+
+            if count > self.warm_up:
+                self.num_images += prediction.shape[0]
+                self.total_inference_time += inference_time
+                self.total_point_prediction_time += point_detection_time
+
+    def get_total_time(self):
+        return (self.total_inference_time + self.total_point_prediction_time) / self.num_images
 
 # Input list of every model path that should be checked inside a class
 # For example [[UNET_A, UNET_B, UNET_C], [OURS_A, OURS_B, OURS_C], [..]]
 # Outputs [[[Precision, F1-Score, NME, IOU, DICE, InferenceSpeed], [..]] for every supplied model]
 def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_names: List[str]) -> List[List[List[float]]]:
     group_evals = []
+    group_times = []
     for MODEL_GROUP in checkpoints:
         per_model_evals = []
+        per_model_times = []
         for CHECKPOINT_PATH in MODEL_GROUP:
             if CHECKPOINT_PATH == "" or not os.path.isdir(CHECKPOINT_PATH):
                 print("\033[93m" + "Please provide a viable checkpoint path")
@@ -508,8 +583,10 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
             if config["model"] == "TwoDtoThreeDNet" or config["model"] == "TwoDtoThreeDNet2":
                 evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
+                timer_eval = InferenceTimer2D3D(model, val_loader, localizer, config)
             else:
                 evaluator = BaseEvaluator(model, val_loader, localizer, config, metrics)
+                timer_eval = BaseInferenceTimer(model, val_loader, localizer, config)
 
 
             with torch.no_grad():
@@ -517,17 +594,21 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
                 print("#"*3 + " " + CHECKPOINT_PATH + " " + "#"*3)
                 print("#"*20)
                 evaluator.evaluate()
-
+                timer_eval.evaluate()
+                
+                per_model_times.append(timer_eval.get_total_time())
                 per_model_evals.append(evaluator.get_final_metrics())
         group_evals.append(per_model_evals)
+        group_times.append(per_model_times)
 
-    for group_name, group_scores in zip(group_names, group_evals):
+    for group_name, group_scores, group_time in zip(group_names, group_evals, group_times):
         print("############" + group_name + "############")
         print("Precision, F1-Score, NME, DICE, IoU")
         print(torch.tensor(group_scores).mean(dim=0))
         print(torch.tensor(group_scores).std(dim=0))
-        print()
-        print()
+        print("Inference-Time")
+        print(torch.tensor(group_time).mean())
+        print(torch.tensor(group_time).std())
 
 
 def main():
@@ -537,7 +618,7 @@ def main():
                     "checkpoints/UNETFULL_LSRH_1355", 
                     "checkpoints/UNETFULL_MKMS_9400", 
                     "checkpoints/UNETFULL_SSTM_5445"]
-    
+
     LSTM_UNET = ["checkpoints/LSTM_MK_MS_7289",
                 "checkpoints/LSTM_CF_CM_5010", 
                 "checkpoints/LSTM_DD_FH_7886", 
