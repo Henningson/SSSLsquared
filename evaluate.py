@@ -438,13 +438,14 @@ class InferenceTimer2D3D:
         self.num_images = 0
 
     def start_timer(self):
+        torch.cuda.synchronize()
         self.timer_start = torch.cuda.Event(enable_timing=True)
         self.timer_end = torch.cuda.Event(enable_timing=True)
         self.timer_start.record()
 
     def stop_timer(self):
         self.timer_end.record()
-        torch.cuda().synchronize()
+        torch.cuda.synchronize()
         return self.timer_start.elapsed_time(self.timer_end)
 
     def evaluate(self):
@@ -470,12 +471,13 @@ class InferenceTimer2D3D:
             _, means, _ = self.localizer.estimate(softmax.flatten(0, 1), segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3).flatten(0, 1))
             point_detection_time = self.stop_timer()
 
-
-
             if count > self.warm_up:
                 self.num_images += pred_seg.flatten(0, 1).shape[0]
                 self.total_inference_time += inference_time
                 self.total_point_prediction_time += point_detection_time
+
+            count += 1
+            loop.set_postfix({"InferenceTime": inference_time, "LocalizeTime": point_detection_time})
 
     def get_total_time(self):
         return (self.total_inference_time + self.total_point_prediction_time) / self.num_images
@@ -495,13 +497,14 @@ class BaseInferenceTimer:
         self.num_images = 0
 
     def start_timer(self):
+        torch.cuda.synchronize()
         self.timer_start = torch.cuda.Event(enable_timing=True)
         self.timer_end = torch.cuda.Event(enable_timing=True)
         self.timer_start.record()
 
     def stop_timer(self):
         self.timer_end.record()
-        torch.cuda().synchronize()
+        torch.cuda.synchronize()
         return self.timer_start.elapsed_time(self.timer_end)
 
     def evaluate(self):
@@ -523,14 +526,14 @@ class BaseInferenceTimer:
             self.start_timer()
             _, means, _ = self.localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
             point_detection_time = self.stop_timer()
-            
-            count += 1
-            loop.set_postfix("Inf. Time: {0:04f}, Loc. Time: {1:04f}".format(inference_time, point_detection_time))
 
             if count > self.warm_up:
                 self.num_images += prediction.shape[0]
                 self.total_inference_time += inference_time
                 self.total_point_prediction_time += point_detection_time
+
+            count += 1
+            loop.set_postfix({"InferenceTime": inference_time, "LocalizeTime": point_detection_time})
 
     def get_total_time(self):
         return (self.total_inference_time + self.total_point_prediction_time) / self.num_images
@@ -582,19 +585,19 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
             metrics = [PrecisionMetric(), F1ScoreMetric(), NMEMetric(), DiceMetric(), JaccardIndexMetric()]
 
             if config["model"] == "TwoDtoThreeDNet" or config["model"] == "TwoDtoThreeDNet2":
-                evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
                 timer_eval = InferenceTimer2D3D(model, val_loader, localizer, config)
+                evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
             else:
-                evaluator = BaseEvaluator(model, val_loader, localizer, config, metrics)
                 timer_eval = BaseInferenceTimer(model, val_loader, localizer, config)
+                evaluator = BaseEvaluator(model, val_loader, localizer, config, metrics)
 
 
             with torch.no_grad():
                 print("#"*20)
                 print("#"*3 + " " + CHECKPOINT_PATH + " " + "#"*3)
                 print("#"*20)
-                evaluator.evaluate()
                 timer_eval.evaluate()
+                evaluator.evaluate()
                 
                 per_model_times.append(timer_eval.get_total_time())
                 per_model_evals.append(evaluator.get_final_metrics())
@@ -625,26 +628,14 @@ def main():
                 "checkpoints/LSTM_LS_RH_8013", 
                 "checkpoints/LSTM_SS_TM_6150"]
 
-    # UNET = ["checkpoints/UNET_CF_CM_3052", 
-    #             "checkpoints/UNET_DD_FH_4761", 
-    #             "checkpoints/UNET_LS_RH_2302", 
-    #             "checkpoints/UNET_MK_MS_3426",
-    #             "checkpoints/UNET_SS_TM_7862"]
-    
     ZweiDDreiD = ["checkpoints/2D3D_CFCM_01_9160", 
                 "checkpoints/2D3D_DDFH_01_3749", 
                 "checkpoints/2D3D_LSRH_01_6746", 
                 "checkpoints/2D3D_MKMS_01_3279", 
                 "checkpoints/2D3D_SSTM_01_650"]
     
-    #OURS_SGD = ["checkpoints/OURS_CFCM_SGD_9607", 
-    #            "checkpoints/OURS_DDFH_SGD_1686", 
-    #            "checkpoints/OURS_LSRH_SGD_6499", 
-    #            "checkpoints/OURS_MKMS_SGD_1310", 
-    #            "checkpoints/OURS_SSTM_SGD_7481"]
-    
-    MODEL_GROUPS = [UNET_FULL]#[UNET_FULL, UNET, OURS, OURS_SGD]
-    MODEL_GROUP_NAMES = ["UNET_FULL"]#["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
+    MODEL_GROUPS = [UNET_FULL, ZweiDDreiD, LSTM_UNET]
+    MODEL_GROUP_NAMES = ["UNET_FULL", "ZweiDDreiD", "LSTM_UNET"]
 
     evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', MODEL_GROUP_NAMES)
 
