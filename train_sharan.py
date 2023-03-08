@@ -72,30 +72,17 @@ def main():
 
     CONFIG_PATH = args.config
     config = ConfigArgsParser.ConfigArgsParser(utils.load_config(CONFIG_PATH), args)
-    train_transform = A.Compose([A.Resize(height=512, width=256),
-                                A.ToFloat(),
-                                A.ColorJitter(brightness=0.2, contrast=(0.3, 1.5), saturation=(0.5, 2), hue=0.1, p=0.5),
-                                A.Rotate(limit=(-60, 60), p=0.5),
-                                A.Affine(translate_percent=10, shear=0.1, p=0.5),
-                                A.HorizontalFlip(p=0.5),
-                                A.VerticalFlip(p=0.5),
-                                A.Normalize(),
-                                ToTensorV2()])
+    train_transform =  A.load("train_transform.yaml", data_format='yaml')
 
-    val_transforms = A.Compose([A.Resize(height=512, width=256),
-                        A.ToFloat(),
-                        A.Normalize(),
-                        ToTensorV2()])
+    val_transforms =  A.load("val_transform.yaml", data_format='yaml')
 
     neuralNet = __import__(config["model"])
     model = neuralNet.Model(config=config).to(DEVICE)
 
-    #repo = pygit2.Repository('.')
-    #num_uncommitted_files = repo.diff().stats.files_changed
-
-    #if num_uncommitted_files > 0:
-    #    Printer.Warning("Uncommited changes! Please commit before training.")
-    #    exit()
+    try:
+        os.mkdir(CHECKPOINT_PATH)
+    except:
+        print("Path " + CHECKPOINT_PATH + " does already exist. Overwriting.")
 
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = optim.Adam(parameters, lr=config['learning_rate'])
@@ -128,7 +115,7 @@ def train(train_loader, model, optimizer, epoch):
     dice = DiceLoss()
 
 
-    for images, gt_seg, gt_heatmap in loop:
+    for images, gt_seg, gt_heatmap, _ in loop:
         optimizer.zero_grad()
 
         images = images.to(device=DEVICE)
@@ -146,10 +133,6 @@ def train(train_loader, model, optimizer, epoch):
 
         running_average += loss.item()
         loop.set_postfix(loss=loss.item())
-
-def evaluate(todo):
-    todo = None
-    print("LOL")
 
 if __name__ == "__main__":
     main()
