@@ -25,7 +25,7 @@ import skimage.morphology
 import sys
 sys.path.append("models/")
 
-DEVICE = 'cpu'#"cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def class_to_color(prediction, class_colors):
@@ -50,24 +50,22 @@ def centres_of_mass(mask, threshold):
     return ndimage.measurements.center_of_mass(mask_bin, label_regions, indexlist)
 
 
-def main():
-    parser = argparse.ArgumentParser(
+def evaluate(checkpoint_path, dataset_path = "../HLEDataset/dataset/"):
+    '''parser = argparse.ArgumentParser(
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="sharan/")
-    parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/SHARAN_SSTM/")
+    parser.add_argument("-d", "--dataset_path", type=str, default=)
 
-    args = parser.parse_args()
-
-    checkpoint_path = args.checkpoint
+    args = parser.parse_args()'''
 
 
     if checkpoint_path == "" or not os.path.isdir(checkpoint_path):
         print("\033[93m" + "Please provide a viable checkpoint path")
 
     config = utils.load_config(os.path.join(checkpoint_path, "config.yml"))
-    config['dataset_path'] = args.dataset_path
+    config['dataset_path'] = dataset_path
 
     val_transforms = A.Compose([
                         A.ToFloat(),
@@ -88,7 +86,6 @@ def main():
                             num_workers=2, 
                             pin_memory=True, 
                             shuffle=False)
-
 
     model.eval()
     TP = 0
@@ -119,12 +116,14 @@ def main():
 
         points = [torch.tensor(centres_of_mass(logits[i, 0].detach().cpu().numpy(), 0.5), dtype=torch.float32) for i in range(logits.shape[0])]
         import metrics_dom
-
-        TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
-        TP += TP_temp
-        FP += FP_temp
-        FN += FN_temp
-        l2_distances = l2_distances + distances
+        try:
+            TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+            TP += TP_temp
+            FP += FP_temp
+            FN += FN_temp
+            l2_distances = l2_distances + distances
+        except:
+            pass
 
         iters += 1
 
@@ -135,8 +134,8 @@ def main():
     prec = metrics_dom.precision(TP, FP, FN)
     inf_time = inference_time/count
 
-    print("AP: {0}, F1: {1}, DICE: {2}, Recall: {3}, Precision: {4}, Inf. Time: {5}, FPS: {6}".format(ap, f1, dice, recoll, prec, inf_time, 1000/inf_time))
-    print("NME_TP: {0}".format(sum(l2_distances)/len(l2_distances)))
+    print("Precision: {0}, F1: {1}, DICE: {2}, Recall: {3}, Precision: {4}, Inf. Time: {5}, FPS: {6}".format(prec, f1, dice, recoll, prec, inf_time, 1000/inf_time))
+    #print("NME_TP: {0}".format(sum(l2_distances)/len(l2_distances)))
 
         #import matplotlib.pyplot as plt
         #bla = Visualizer.Visualize2D(x=4)
@@ -146,5 +145,19 @@ def main():
         #bla.draw_points(gt_keypoints, color='green')
         #plt.show(block=True)
 
+    return prec, f1
+
 if __name__ == "__main__":
-    main()
+    prec_0, f1_0 = evaluate("checkpoints/SHARAN_CFCM/")
+    prec_1, f1_1 = evaluate("checkpoints/SHARAN_DDFH/")
+    prec_2, f1_2 = evaluate("checkpoints/SHARAN_LSRH/")
+    prec_3, f1_3 = evaluate("checkpoints/SHARAN_MKMS/")
+    prec_4, f1_4 = evaluate("checkpoints/SHARAN_SSTM/")
+
+    prec = torch.tensor([prec_0, prec_1, prec_2, prec_3, prec_4])
+    print("Precsision: {0:04f}".format(prec.mean()))
+    print("Precsision STD: {0:04f}".format(prec.std()))
+
+    f1 = torch.tensor([f1_0, f1_1, f1_2, f1_3, f1_4])
+    print("Precsision: {0:04f}".format(f1.mean()))
+    print("Precsision STD: {0:04f}".format(f1.std()))

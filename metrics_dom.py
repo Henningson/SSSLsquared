@@ -59,6 +59,8 @@ def keypoint_statistics(
     target_format: str = 'xy'
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
 
+    if prediction == None:
+        return torch.tensor(0), torch.tensor(0), torch.tensor(0), [torch.tensor(0)]
     bs = len(prediction)
 
     if bs != len(target):

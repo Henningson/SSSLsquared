@@ -425,6 +425,42 @@ class Evaluator2D3D:
         return [metric.get_final_score() for metric in self.metrics]
 
 
+class BaseInferenceEvaluator:
+    def __init__(self, model, val_loader, localizer, config, metrics, warm_up = 3):
+        self.model = model
+        self.val_loader = val_loader
+        self.config = config
+        self.metrics = metrics
+        self.localizer = localizer
+        self.warm_up = 3
+
+
+        self.total_inference_time = 0.0
+        self.total_point_prediction_time = 0.0
+        self.total_time = 0.0
+
+    def evaluate(self):
+        loop = tqdm(self.val_loader, desc="Evaluation")
+        for images, gt_seg, keypoints in loop:
+            images = images.to(device=DEVICE)
+            gt_seg = gt_seg.to(device=DEVICE).long()
+            keypoints = keypoints.to(device=DEVICE)
+            
+            keypoints = keypoints.float().split(1, dim=0)
+            keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in keypoints]
+
+            prediction = self.model(images).softmax(dim=1)
+            segmentation = prediction.argmax(dim=1)
+            _, means, _ = self.localizer.estimate(prediction, segmentation=torch.bitwise_or(segmentation == 2, segmentation == 3))
+
+            metric_dict = {}
+            for metric in self.metrics:
+                if metric.isKeypointMetric():
+                    metric_dict[metric.name] = metric.compute(means, keypoints)
+                else:
+                    metric_dict[metric.name] = metric.compute(segmentation, gt_seg)
+            
+            loop.set_postfix(metric_dict)
 
 # Input list of every model path that should be checked inside a class
 # For example [[UNET_A, UNET_B, UNET_C], [OURS_A, OURS_B, OURS_C], [..]]
@@ -470,7 +506,7 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
             evaluator = None
             metrics = [PrecisionMetric(), F1ScoreMetric(), NMEMetric(), DiceMetric(), JaccardIndexMetric()]
 
-            if config["model"] == "TwoDtoThreeDNet":
+            if config["model"] == "TwoDtoThreeDNet" or config["model"] == "TwoDtoThreeDNet2":
                 evaluator = Evaluator2D3D(model, val_loader, localizer, config, metrics)
             else:
                 evaluator = BaseEvaluator(model, val_loader, localizer, config, metrics)
@@ -495,19 +531,26 @@ def evaluate_everything(checkpoints: List[List[str]], dataset_path: str, group_n
 
 
 def main():
+    
     UNET_FULL = ["checkpoints/UNETFULL_CFCM_2558", 
                     "checkpoints/UNETFULL_DDFH_1010", 
-                    #"checkpoints/UNETFULL_LS_RH_2342", 
+                    "checkpoints/UNETFULL_LSRH_1355", 
                     "checkpoints/UNETFULL_MKMS_9400", 
                     "checkpoints/UNETFULL_SSTM_5445"]
     
+    LSTM_UNET = ["checkpoints/LSTM_MK_MS_7289",
+                "checkpoints/LSTM_CF_CM_5010", 
+                "checkpoints/LSTM_DD_FH_7886", 
+                "checkpoints/LSTM_LS_RH_8013", 
+                "checkpoints/LSTM_SS_TM_6150"]
+
     # UNET = ["checkpoints/UNET_CF_CM_3052", 
     #             "checkpoints/UNET_DD_FH_4761", 
     #             "checkpoints/UNET_LS_RH_2302", 
     #             "checkpoints/UNET_MK_MS_3426",
     #             "checkpoints/UNET_SS_TM_7862"]
     
-    OURS = ["checkpoints/2D3D_CFCM_01_9160", 
+    ZweiDDreiD = ["checkpoints/2D3D_CFCM_01_9160", 
                 "checkpoints/2D3D_DDFH_01_3749", 
                 "checkpoints/2D3D_LSRH_01_6746", 
                 "checkpoints/2D3D_MKMS_01_3279", 
@@ -519,8 +562,8 @@ def main():
     #            "checkpoints/OURS_MKMS_SGD_1310", 
     #            "checkpoints/OURS_SSTM_SGD_7481"]
     
-    MODEL_GROUPS = [UNET_FULL, OURS]#[UNET_FULL, UNET, OURS, OURS_SGD]
-    MODEL_GROUP_NAMES = ["UNET_FULL", "OURS"]#["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
+    MODEL_GROUPS = [UNET_FULL]#[UNET_FULL, UNET, OURS, OURS_SGD]
+    MODEL_GROUP_NAMES = ["UNET_FULL"]#["UNET_FULL", "UNET", "OURS", "OURS_SGD"]
 
     evaluate_everything(MODEL_GROUPS, '../HLEDataset/dataset/', MODEL_GROUP_NAMES)
 
