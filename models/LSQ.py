@@ -119,7 +119,7 @@ class LSQLocalization:
 
         # Generate thresholded image
         threshed_heat = (heat > self.threshold) * heat
-        #threshed_heat = kornia.filters.gaussian_blur2d(threshed_heat, self.kernel.shape, [self.kernel.shape[0]/4, self.kernel.shape[0]/4])
+        threshed_heat = kornia.filters.gaussian_blur2d(threshed_heat, self.kernel.shape, [self.kernel.shape[0]/4, self.kernel.shape[0]/4])
         
 
         # Use dilation filtering to generate local maxima and squeeze first dimension

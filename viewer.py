@@ -88,6 +88,8 @@ class MainWindow(QMainWindow):
         self.pred_points = pred_points
         
         self.current_img_index = 0
+        self.start_save_index = 0
+        self.stop_save_index = video.shape[0]
 
         self.video_scene, self.video_view = self.initScene()
         self.seg_scene, self.seg_view = self.initScene()
@@ -133,6 +135,14 @@ class MainWindow(QMainWindow):
              self.video_view.zoomReset()
         elif event.key() == Qt.Key_P:
             self.saveImages()
+        elif event.key() == Qt.Key_J:
+            self.start_save_index = self.current_img_index
+            print("Set starting index for video saving to: {0}".format(self.start_save_index))
+        elif event.key() == Qt.Key_K:
+            self.stop_save_index = self.current_img_index
+            print("Set stopping index for video saving to: {0}".format(self.stop_save_index))
+        elif event.key() == Qt.Key_L:
+            self.save_videos()
         
         print(self.current_img_index)
 
@@ -146,11 +156,73 @@ class MainWindow(QMainWindow):
         self.current_img_index = next_index
         self._redraw()
 
-    def saveImages(self):
-        self.saveImage(self.video_view, "GT_Image.png")
-        self.saveImage(self.seg_view, "Seg_image.png")
-        self.saveImage(self.gtseg_view, "GTSeg_Image.png")
-        self.saveImage(self.error_view, "Error_Image.png")
+    def saveImages(self, gt_image_name = "input.png", seg_name = "Seg.png", gtseg_name = "GTSeg.png", error_name = "Error.png"):
+        self.saveImage(self.video_view, gt_image_name)
+        self.saveImage(self.seg_view, seg_name)
+        self.saveImage(self.gtseg_view, gtseg_name)
+        self.saveImage(self.error_view, error_name)
+
+    def save_videos(self, base_folder = ""):
+        if self.start_save_index >= self.stop_save_index:
+            print("Start index ({0}) greater than stop index ({1})".format(self.start_save_index, self.stop_save_index))
+            return
+
+        path_gt = "0_GT" if base_folder == "" else os.path.join(base_folder, path_gt)
+        path_point = "0_Points" if base_folder == "" else os.path.join(base_folder, path_gt)
+        path_gtpoint = "0_GTPoints" if base_folder == "" else os.path.join(base_folder, path_gt)
+        path_seg = "0_Seg" if base_folder == "" else os.path.join(base_folder, path_gt)
+        path_gtseg = "0_GTSeg" if base_folder == "" else os.path.join(base_folder, path_gt)
+        path_error = "0_Error" if base_folder == "" else os.path.join(base_folder, path_gt)
+
+        if base_folder != "":
+            os.makedirs(base_folder, exist_ok=True)
+
+            path_gt = os.path.join(base_folder, path_gt)
+            path_point = os.path.join(base_folder, path_point)
+            path_gtpoint = os.path.join(base_folder, path_gtpoint)
+            path_seg = os.path.join(base_folder, path_seg)
+            path_gtseg = os.path.join(base_folder, path_gtseg)
+            path_error = os.path.join(base_folder, path_error)
+
+        os.makedirs(path_gt, exist_ok=True)
+        os.makedirs(path_gtpoint, exist_ok=True)
+        os.makedirs(path_point, exist_ok=True)
+        os.makedirs(path_seg, exist_ok=True)
+        os.makedirs(path_gtseg, exist_ok=True)
+        os.makedirs(path_error, exist_ok=True)
+
+        tmp_curr_img_index = self.current_img_index
+        tmp_show_gt_points = self.show_gt_points
+        tmp_show_pred_points = self.show_pred_points
+
+        self.current_img_index = self.start_save_index
+        self.show_gt_points = False
+        self.show_pred_points = False
+        self._redraw()
+        for i in range(self.start_save_index, self.stop_save_index):
+            self.saveImages("{0}/{1:05d}.png".format(path_gt,  i), 
+                            "{0}/{1:05d}.png".format(path_seg,  i), 
+                            "{0}/{1:05d}.png".format(path_gtseg,  i), 
+                            "{0}/{1:05d}.png".format(path_error,  i))
+            
+            self.show_pred_points = True
+            self._redraw()
+            self.saveImage(self.video_view, "{0}/{1:05d}.png".format(path_point,  i))
+            self.show_pred_points = False
+
+            self.show_gt_points = True
+            self._redraw()
+            self.saveImage(self.video_view, "{0}/{1:05d}.png".format(path_gtpoint,  i))
+            self.show_gt_points = False
+
+            self.nextImage()
+
+        self.current_img_index = tmp_curr_img_index
+        self.show_gt_points = tmp_show_gt_points
+        self.show_pred_points = tmp_show_pred_points
+        self._redraw()
+        print("Done!")
+
 
     def saveImage(self, view, filename):
         img = view.grab()
