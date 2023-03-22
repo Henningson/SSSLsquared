@@ -8,14 +8,16 @@
 This repository accompanies the paper <a href="https://henningson.github.io/Vocal3D/assets/Paper.pdf">Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy</a>.
 This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
 
-# Why SSSL^2?
-SSSL^2 := SSSLSSSL stands for **S**emantic **S**egmentation and **S**ub-Pixel Accurate **L**ocalization in **S**ingle-**S**hot **S**tructured **LL**ight Laryngoscopy.
+## Why SSSL^2?
+SSSL^2 := SSSLSSSL stands for **S**emantic **S**egmentation and **S**ub-Pixel Accurate **L**ocalization in **S**ingle-**S**hot **S**tructured **L**ight Laryngoscopy.
 Our approach estimates a semantic segmentation of the Vocal Folds and Glottal Gap while simultaneously predicting sub-pixel accurate laserpoint positions in an efficient manner.
 It is used on a per frame basis in structured light laryngoscopy.
 
-
 ## Dataset
 The updated Dataset was integrated into the original repository and can be found <a href="https://github.com/Henningson/HLEDataset.git">here on GitHub</a>!  
+
+## Quantitative Evaluation and Comparison
+TODO.
 
 ## Prerequisites
 Make sure that you have a Python version >=3.5 installed.
@@ -23,6 +25,9 @@ A CUDA capable GPU is recommended, but not necessary.
 However, note that inference times are most definitely higher, and training a network from scratch may take ages.
 
 ## Installation
+TODO.
+
+## Pretrained Models
 TODO.
 
 ## Visualizing Results
