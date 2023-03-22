@@ -10,7 +10,7 @@ import math
 def main():
 
     config = {
-        'dataset_path': '../HLEDataset/dataset/',
+        'dataset_path': '../../HLEDataset/dataset/',
         'val_keys': "CF,CM,DD,FH,LS,RH,SS,TM,MK,MS",
         'train_keys': '',
         'pad_keypoints': 200,

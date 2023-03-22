@@ -31,7 +31,6 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         for idx in range(0, len(self.ups), 2):
-            print(x.shape)
             x = self.ups[idx](x)
             skip_connection = self.encoder.skip_connections[idx//2]
 
@@ -59,7 +58,6 @@ class Encoder(nn.Module):
     def forward(self, x):
         self.skip_connections = []
         for down in self.downs:
-            print(x.shape)
             x = down(x)
             self.skip_connections.append(x)
             x = self.pool(x)
@@ -135,17 +133,11 @@ class Model(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
-        print(x.shape)
         x = self.bottleneck(x)
-        print(x.shape)
         x = self.depth_conv(x.unsqueeze(1)).squeeze()
-        print(x.shape)
         x = self.decoder(x)
-        print(x.shape)
         x = self.conv_to_channel(x)
-        print(x.shape)
         x = self.final_conv(x.unsqueeze(1))
-        print(x.shape)
         return x
 
 
