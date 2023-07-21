@@ -31,7 +31,6 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         for idx in range(0, len(self.ups), 2):
-            #print(x.shape)
             x = self.ups[idx](x)
             skip_connection = self.encoder.skip_connections[idx//2]
 
@@ -59,7 +58,6 @@ class Encoder(nn.Module):
     def forward(self, x):
         self.skip_connections = []
         for down in self.downs:
-            #print(x.shape)
             x = down(x)
             self.skip_connections.append(x)
             x = self.pool(x)

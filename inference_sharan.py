@@ -2,7 +2,7 @@ import torch
 import albumentations as A
 import argparse
 import os
-import utils
+import Utils.utils as utils
 import numpy as np
 import matplotlib.cm as cm
 import viewer
@@ -115,7 +115,7 @@ def evaluate(checkpoint_path, dataset_path = "../HLEDataset/dataset/"):
             count += logits.shape[0]
 
         points = [torch.tensor(centres_of_mass(logits[i, 0].detach().cpu().numpy(), 0.5), dtype=torch.float32) for i in range(logits.shape[0])]
-        import metrics_dom
+        import Metrics.KeypointMetrics as metrics_dom
         try:
             TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
             TP += TP_temp

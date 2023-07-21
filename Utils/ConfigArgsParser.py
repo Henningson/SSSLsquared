@@ -1,7 +1,7 @@
-import utils
+import Utils.utils as utils
 import argparse
 import yaml
-from printer import Printer
+from Utils.printer import Printer
 
 
 class ConfigArgsParser(dict):
