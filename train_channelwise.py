@@ -20,7 +20,7 @@ import os
 import pygit2
 import Utils.ConfigArgsParser as ConfigArgsParser
 from models.LSQ import LSQLocalization
-from typing import List, Union, Tuple, Optional
+from typing import Tuple
 import sys
 import random
 import Utils.Args as Args
