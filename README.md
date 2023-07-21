@@ -3,12 +3,12 @@
 ![GPL-3.0](https://img.shields.io/github/license/Henningson/vocaloid)
 
 
-# SSSL^2
+# SSSL²
 This repository accompanies the paper <a href="https://henningson.github.io/Vocal3D/assets/Paper.pdf">Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy</a>.
 This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
 
-## Why SSSL^2?
-SSSL^2 := SSSLSSSL stands for **S**emantic **S**egmentation and **S**ub-Pixel Accurate **L**ocalization in **S**ingle-**S**hot **S**tructured **L**ight Laryngoscopy.
+## Why SSSL²?
+(SSSL)² := SSSLSSSL stands for **S**emantic **S**egmentation and **S**ub-Pixel Accurate **L**ocalization in **S**ingle-**S**hot **S**tructured **L**ight Laryngoscopy.
 Our approach estimates a semantic segmentation of the Vocal Folds and Glottal Gap while simultaneously predicting sub-pixel accurate laserpoint positions in an efficient manner.
 It is used on a per frame basis (single-shot) in an active reconstruction setting (structured light) in laryngeal endoscopy (laryngoscopy).
 
@@ -34,7 +34,10 @@ We supply a environment.yaml inside this folder.
 You can use this to easily setup a conda environment.
 
 ## Pretrained Models
-TODO.
+The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni-erlangen.de/getlink/fiC95rzuAZBzC1JjPo37uR/UNet.zip">here</a>.  
+If you want the other models as well, please contact me.  
+Uploading every model easily spends all of my available cloud space that I get from the university, lol. 
+
 
 ## Visualizing Results
 ![Inference Viewer](assets/InferenceViewer.png)
