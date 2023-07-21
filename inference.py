@@ -48,7 +48,7 @@ def main():
                     prog = 'Inference for Deep Neural Networks',
                     description = 'Loads  as input, and visualize it based on the keys given in the config file.',
                     epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNETFULL_MKMS_9400/")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_3279/")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
 
     args = parser.parse_args()
@@ -94,7 +94,7 @@ def main():
     colors = [np.array(cm.get_cmap("Set2")(i*(1/config['num_classes']))[0:3]) for i in range(config['num_classes'] - 1)]
     model.eval()
 
-    if config["model"] == "ChannelDepthUNet" or config["model"] == "TwoDtoThreeDNet":
+    if config["model"] == "ChannelDepthUNet" or config["model"] == "TwoDtoThreeDNet" or config["model"] == "TwoDtoThreeDNetNOBOT":
         visChannelwise(val_loader, model, localizer, config["batch_size"], old_sequence_length, colors)
     else:
         vis(val_loader, model, localizer, colors)
