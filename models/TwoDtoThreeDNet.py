@@ -31,7 +31,6 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         for idx in range(0, len(self.ups), 2):
-            print(x.shape)
             x = self.ups[idx](x)
             skip_connection = self.encoder.skip_connections[idx//2]
 
@@ -59,7 +58,6 @@ class Encoder(nn.Module):
     def forward(self, x):
         self.skip_connections = []
         for down in self.downs:
-            print(x.shape)
             x = down(x)
             self.skip_connections.append(x)
             x = self.pool(x)
@@ -135,28 +133,22 @@ class Model(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
-        print(x.shape)
         x = self.bottleneck(x)
-        print(x.shape)
         x = self.depth_conv(x.unsqueeze(1)).squeeze()
-        print(x.shape)
         x = self.decoder(x)
-        print(x.shape)
         x = self.conv_to_channel(x)
-        print(x.shape)
         x = self.final_conv(x.unsqueeze(1))
-        print(x.shape)
         return x
 
 
 def test():
 
     batch_size = 4
-    sequence_length = 6
+    sequence_length = 5
     config={'batch_size': batch_size, 'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512], 'sequence_length': sequence_length}
-    x = torch.randn((batch_size, 6, 512, 256))
-    y = torch.randn((batch_size, 4, 100))
-    model = Model(config)
+    x = torch.randn((batch_size, 6, 512, 256)).cuda()
+    y = torch.randn((batch_size, 4, 100)).cuda()
+    model = Model(config).cuda()
     model.eval()
     for i in range(500):
         starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)

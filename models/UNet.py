@@ -122,25 +122,22 @@ class Model(nn.Module):
 
 
 def test():
-    import sys
-    sys.path.append("..")
-    from pytorch_modelsize import SizeEstimator
-
-    config={'in_channels': 3, 'out_channels': 324, 'features': [64, 128, 256, 512, 1024]}
-    rand_input = torch.randn((4, 3, 512, 256))
-    expected_output_size = torch.randn((4, 324, 100))
-    bla = model(rand_input)
-    model = Model(config)
-    se = SizeEstimator(model, rand_input.shape)
-    
-    print(se.estimate_size())
-    print(type(model).__name__)
-    #print(points.shape)
-
-    #print(Losses.CountingLoss(points.reshape(4, 2, -1), y))
-    #print(CHM_loss.apply(points.reshape(4, 2, -1), y))
-
-    # Seems to be working
+    batch_size = 8
+    sequence_length = 1
+    config={'batch_size': batch_size, 'in_channels': 6, 'out_channels': 4, 'features': [64, 128, 256, 512], 'sequence_length': sequence_length}
+    x = torch.randn((batch_size, 6, 512, 256)).cuda()
+    y = torch.randn((batch_size, 4, 100)).cuda()
+    model = Model(config).cuda()
+    model.eval()
+    with torch.no_grad():
+        for i in range(500):
+            starter_cnn, ender_cnn = torch.cuda.Event(enable_timing=True),   torch.cuda.Event(enable_timing=True)
+            torch.cuda.synchronize()
+            starter_cnn.record()
+            seg = model(x)
+            ender_cnn.record()
+            torch.cuda.synchronize()
+            print(starter_cnn.elapsed_time(ender_cnn) / (batch_size * sequence_length))
 
 if __name__ == "__main__":
     test()

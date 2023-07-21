@@ -4,21 +4,20 @@ from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from dataset import HLEPlusPlus
 from torch.utils.data import DataLoader
-import LRscheduler
 import datetime
 import yaml
-from pathlib import Path
 from evaluate import evaluate
 import os
 import argparse
 import pygit2
-import Visualizer
 import numpy as np
 import cv2
-import utils
+
+import Utils.LRscheduler as LRscheduler
+import Utils.utils as utils
+import Visualization.Matplot as Visualizer
 
 import sys
 sys.path.append("models/")

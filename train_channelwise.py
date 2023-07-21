@@ -12,24 +12,21 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import LRscheduler
+import Utils.LRscheduler as LRscheduler
 import datetime
 import yaml
-from printer import Printer
+import Utils.printer as Printer
 import os
 import pygit2
-import utils
-import Losses
-import ConfigArgsParser
+import Utils.ConfigArgsParser as ConfigArgsParser
 from models.LSQ import LSQLocalization
 from typing import List, Union, Tuple, Optional
 import sys
 import random
-import Args
-import utils
+import Utils.Args as Args
+import Utils.utils as utils 
 import wandb
 
-import kornia
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(0)
@@ -237,7 +234,7 @@ def visualize(val_loader, model, epoch, title="Validation Predictions", num_log=
 
 
 
-import metrics_dom
+import Metrics.KeypointMetrics as KeypointMetrics
 from chamferdist import ChamferDistance
 from torchmetrics.functional import dice, jaccard_index
 def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb = False) -> Tuple[float, float, float, float, float, float, float]:
@@ -297,7 +294,7 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
                 gt_keypoints = keypoints.split(1, dim=0)
                 gt_keypoints = [keys[0][~torch.isnan(keys[0]).any(axis=1)][:, [1, 0]] for keys in gt_keypoints]
 
-                TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(pred_keypoints, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+                TP_temp, FP_temp, FN_temp, distances = KeypointMetrics.keypoint_statistics(pred_keypoints, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
                 TP += TP_temp
                 FP += FP_temp
                 FN += FN_temp
@@ -322,8 +319,8 @@ def evaluate(val_loader, model, loss_func, localizer=None, epoch = -1, log_wandb
     if localizer is not None:
         # Keypoint Stuff
         try:
-            precision = metrics_dom.precision(TP, FP, FN)
-            f1 = metrics_dom.f1_score(TP, FP, FN)
+            precision = KeypointMetrics.precision(TP, FP, FN)
+            f1 = KeypointMetrics.f1_score(TP, FP, FN)
             nme = sum(l2_distances)/len(l2_distances)
         except:
             precision = 0.0
