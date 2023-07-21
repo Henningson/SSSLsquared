@@ -1,5 +1,6 @@
 import torch
 import sys
+from tqdm import tqdm
 sys.path.append("models/")
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

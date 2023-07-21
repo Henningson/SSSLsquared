@@ -5,7 +5,7 @@ import os
 import Utils.utils as utils
 import numpy as np
 import matplotlib.cm as cm
-import viewer
+import Visualization.QTViewer as viewer
 from darktheme.widget_template import DarkPalette
 
 
@@ -17,13 +17,9 @@ os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(
 )
 
 from PyQt5.QtWidgets import QApplication
-
-
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from dataset import HLEPlusPlus
 from models.LSQ import LSQLocalization
-import Visualizer
 
 import sys
 sys.path.append("models/")
@@ -37,7 +33,7 @@ def class_to_color(prediction, class_colors):
     for class_idx, color in enumerate(class_colors):
         mask = class_idx == prediction
         curr_color = color.reshape(1, 3, 1, 1)
-        segment = mask*curr_color # should have shape 1, 3, 100, 100
+        segment = mask*curr_color
         output += segment
 
     return output
@@ -45,11 +41,19 @@ def class_to_color(prediction, class_colors):
 
 def main():
     parser = argparse.ArgumentParser(
-                    prog = 'Inference for Deep Neural Networks',
-                    description = 'Loads  as input, and visualize it based on the keys given in the config file.',
-                    epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_3279/")
-    parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/')
+                    prog = 'Inference Viewer for SSSL^2',
+                    description = 
+                    'Visualize the prediction capabilities of a trained model. \n\
+                    Please provide a path pointing to a checkpoint folder as well as the path ti. Usage \n\
+                    _______Usage: \n\
+                    A: Previous Frame \n\
+                    D: Next Frame \n\
+                    W: Toggle Predicted Keypoints (Green) \n\
+                    S: Toggle Ground-Truth Keypoints (Blue) \n\
+                    Scroll Mousewheel: Zoom In and Out',
+                    epilog = 'If you have any questions, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_3279/", help="The path pointing to the checkpoint folder.")
+    parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/',       help="The path pointing to the dataset folder.")
 
     args = parser.parse_args()
 

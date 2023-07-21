@@ -1,26 +1,16 @@
 import torch
 import albumentations as A
-import argparse
 import os
 import Utils.utils as utils
 import numpy as np
-import matplotlib.cm as cm
-import viewer
-from darktheme.widget_template import DarkPalette
-
-from PyQt5.QtWidgets import QApplication
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from dataset import HLEPlusPlus
-from models.LSQ import LSQLocalization
-import Visualizer
-from albumentations.pytorch import ToTensorV2
-
 from copy import deepcopy
 from scipy import ndimage
 import skimage.draw
 import skimage.measure
 import skimage.morphology
+import Metrics.KeypointMetrics as KeypointMetrics
 
 import sys
 sys.path.append("models/")
@@ -51,16 +41,6 @@ def centres_of_mass(mask, threshold):
 
 
 def evaluate(checkpoint_path, dataset_path = "../HLEDataset/dataset/"):
-    '''parser = argparse.ArgumentParser(
-                    prog = 'Inference for Deep Neural Networks',
-                    description = 'Loads  as input, and visualize it based on the keys given in the config file.',
-                    epilog = 'For question, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/SHARAN_SSTM/")
-    parser.add_argument("-d", "--dataset_path", type=str, default=)
-
-    args = parser.parse_args()'''
-
-
     if checkpoint_path == "" or not os.path.isdir(checkpoint_path):
         print("\033[93m" + "Please provide a viable checkpoint path")
 
@@ -115,9 +95,10 @@ def evaluate(checkpoint_path, dataset_path = "../HLEDataset/dataset/"):
             count += logits.shape[0]
 
         points = [torch.tensor(centres_of_mass(logits[i, 0].detach().cpu().numpy(), 0.5), dtype=torch.float32) for i in range(logits.shape[0])]
-        import Metrics.KeypointMetrics as metrics_dom
+
+
         try:
-            TP_temp, FP_temp, FN_temp, distances = metrics_dom.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
+            TP_temp, FP_temp, FN_temp, distances = KeypointMetrics.keypoint_statistics(points, gt_keypoints, 2.0, prediction_format="yx", target_format="yx")
             TP += TP_temp
             FP += FP_temp
             FN += FN_temp
@@ -127,24 +108,14 @@ def evaluate(checkpoint_path, dataset_path = "../HLEDataset/dataset/"):
 
         iters += 1
 
-    ap = metrics_dom.average_precision(TP, FP, FN)
-    f1 = metrics_dom.f1_score(TP, FP, FN)
-    dice = metrics_dom.dice_score(TP, FP, FN)
-    recoll = metrics_dom.recall(TP, FP, FN)
-    prec = metrics_dom.precision(TP, FP, FN)
+    ap = KeypointMetrics.average_precision(TP, FP, FN)
+    f1 = KeypointMetrics.f1_score(TP, FP, FN)
+    dice = KeypointMetrics.dice_score(TP, FP, FN)
+    recoll = KeypointMetrics.recall(TP, FP, FN)
+    prec = KeypointMetrics.precision(TP, FP, FN)
     inf_time = inference_time/count
 
     print("Precision: {0}, F1: {1}, DICE: {2}, Recall: {3}, Precision: {4}, Inf. Time: {5}, FPS: {6}".format(prec, f1, dice, recoll, prec, inf_time, 1000/inf_time))
-    #print("NME_TP: {0}".format(sum(l2_distances)/len(l2_distances)))
-
-        #import matplotlib.pyplot as plt
-        #bla = Visualizer.Visualize2D(x=4)
-        #bla.draw_images(images)
-        #bla.draw_heatmap(logits, opacity=0.3)
-        #bla.draw_points(points)
-        #bla.draw_points(gt_keypoints, color='green')
-        #plt.show(block=True)
-
     return prec, f1
 
 if __name__ == "__main__":

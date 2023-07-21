@@ -4,24 +4,21 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import LRscheduler
 import datetime
 import yaml
 from evaluate import evaluate
-from printer import Printer
+import Utils.printer as Printer
 import os
-import argparse
 import pygit2
-import Visualizer
+import Visualization.Matplot as Visualizer
 import cv2
-import utils
-import Losses
-import ConfigArgsParser
+import Utils.utils as utils
+import Utils.ConfigArgsParser as ConfigArgsParser
+import Utils.Args as Args
+import Utils.LRscheduler as LRscheduler
 from models.LSQ import LSQLocalization
 import sys
 import random
-import Args
-import utils
 import wandb
 
 import kornia

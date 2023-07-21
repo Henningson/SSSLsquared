@@ -4,20 +4,14 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import datetime
 import yaml
-from printer import Printer
 import os
-import argparse
-import pygit2
-import utils
-from albumentations.pytorch import ToTensorV2
-import ConfigArgsParser
-import torch.nn.functional as F
 import dataset
 import sys
-import random
-import Args
+import Utils.Args as Args
+import Utils.utils as utils
+import Utils.ConfigArgsParser as ConfigArgsParser
+import Utils.printer as Printer
 
 sys.path.append("models/")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

@@ -671,11 +671,9 @@ if __name__ == "__main__":
                             pin_memory=True, 
                             shuffle=True)
 
-    import Visualizer
+    import Visualization.Matplot as Visualizer
     for images, gt_seg, keypoints in tqdm(val_loader, desc="Generating Video Frames"):
-        a = 1#
         import matplotlib.pyplot as plt
-        import Visualizer
         vis = Visualizer.Visualize2D(x=6, y=1)
         vis.draw_sequence(images)
         vis.show()
