@@ -52,6 +52,11 @@ You can use it via ```inference.py```, with
 `Click Mousewheel`: Drag View.  
 
 
+## Least Squares Gaussian Fitting
+You can find the code for the gaussian fitting inside ```Models/LSQ.py```, you'll also find a small example in there.  
+Feel free to copy and modify it to your liking. :+1:
+
+
 ## Evaluating a Network
 Can be done using ```evaluate.py```.
 
