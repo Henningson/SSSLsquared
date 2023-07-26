@@ -4,7 +4,7 @@
 
 
 # SSSL²
-This repository accompanies the paper <a href="https://henningson.github.io/Vocal3D/assets/Paper.pdf">Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy</a>.
+This repository accompanies the paper **Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy**.
 This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
 
 ## Why SSSL²?
@@ -13,7 +13,7 @@ Our approach estimates a semantic segmentation of the Vocal Folds and Glottal Ga
 It is used on a per frame basis (single-shot) in an active reconstruction setting (structured light) in laryngeal endoscopy (laryngoscopy).
 
 ## Dataset
-The updated Dataset was integrated into the original repository and can be found <a href="https://github.com/Henningson/HLEDataset.git">here on GitHub</a>!  
+The vocal fold segmentations were integrated into the original repository and can be found <a href="https://github.com/Henningson/HLEDataset.git">here on GitHub</a>!
 
 ## Quantitative Evaluation and Comparison
 |            | Precision :arrow_up:   | F1-Score :arrow_up:    | IoU :arrow_up:        | DICE :arrow_up:       | Inf. Speed (ms) :arrow_down: | FPS :arrow_up: |
@@ -31,7 +31,8 @@ However, note that inference times are most definitely higher, and training a ne
 
 ## Installation
 We supply a environment.yaml inside this folder.
-You can use this to easily setup a conda environment.
+You can use this to easily setup a conda environment using  
+```conda env create -f environment.yml```
 
 ## Pretrained Models
 The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni-erlangen.de/getlink/fiC95rzuAZBzC1JjPo37uR/UNet.zip">here</a>.  
@@ -51,7 +52,7 @@ You can use it via ```inference.py```, with
 `Click Mousewheel`: Drag View.  
 
 
-## Evaluating a Trained Network
+## Evaluating a Network
 Can be done using ```evaluate.py```.
 
 ## Training a Network from Scratch
@@ -60,16 +61,13 @@ TODO.
 ## Things to note
 We are currently in the process of heavily refactoring this code. The most recent version can be found in the **refactor** branch.
 
-## Limitations
-TODO.
-
 ## Citation
 Please cite this paper, if this work helps you with your research:
 ```
 @InProceedings{SegAndLocalize,
-  author="Henningson, Jann-Ole and Semmler, Marion and D{\"o}llinger, Michael and Stamminger, Marc",
-  title="Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy",
-  booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 2023",
+  author="TBD",
+  title="TBD",
+  booktitle="TBD",
   year="2023",
   pages="?",
   isbn="?"

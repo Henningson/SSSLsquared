@@ -52,7 +52,7 @@ def main():
                     S: Toggle Ground-Truth Keypoints (Blue) \n\
                     Scroll Mousewheel: Zoom In and Out',
                     epilog = 'If you have any questions, generate an issue at: https://github.com/Henningson/SSSLsquared or write an E-Mail to: jann-ole.henningson@fau.de')
-    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/2D3D_MKMS_01_3279/", help="The path pointing to the checkpoint folder.")
+    parser.add_argument("-c", "--checkpoint", type=str, default="checkpoints/UNETFULL_MKMS_9400/", help="The path pointing to the checkpoint folder.")
     parser.add_argument("-d", "--dataset_path", type=str, default='../HLEDataset/dataset/',       help="The path pointing to the dataset folder.")
 
     args = parser.parse_args()
