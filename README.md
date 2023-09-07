@@ -3,11 +3,11 @@
 ![GPL-3.0](https://img.shields.io/github/license/Henningson/vocaloid)
 
 
-# (SSSL)²
+# \(SSSL\)²
 This repository accompanies the paper **Joint Segmentation and Sub-Pixel Localization in Structured Light Laryngoscopy**.
 This is a joint work of the <a href="https://www.lgdv.tf.fau.de/">Chair of Visual Computing</a> of the Friedrich-Alexander University of Erlangen-Nuremberg and the <a href="https://www.hno-klinik.uk-erlangen.de/phoniatrie/">Phoniatric Division</a> of the University Hospital Erlangen. 
 
-## Why (SSSL)²?
+## Why \(SSSL\)²?
 (SSSL)² := SSSLSSSL stands for **S**emantic **S**egmentation and **S**ub-Pixel Accurate **L**ocalization in **S**ingle-**S**hot **S**tructured **L**ight Laryngoscopy.
 Our approach estimates a semantic segmentation of the Vocal Folds and Glottal Gap while simultaneously predicting sub-pixel accurate laserpoint positions in an efficient manner.
 It is used on a per frame basis (single-shot) in an active reconstruction setting (structured light) in laryngeal endoscopy (laryngoscopy).
