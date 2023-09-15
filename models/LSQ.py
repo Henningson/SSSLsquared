@@ -48,6 +48,8 @@ def extractWindow(batch, indices, window_size=11, device='cuda'):
     return windows.reshape(-1, window_size, window_size), y_windows, x_windows
 
 
+# From: https://scipython.com/blog/linear-least-squares-fitting-of-a-two-dimensional-data/
+# There's definitely a faster way to do this
 def get_basis(x, y):
     """Return the fit basis polynomials: 1, x, x^2, ..., xy, x^2y, ... etc."""
     basis = []
