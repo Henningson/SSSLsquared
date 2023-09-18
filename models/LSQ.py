@@ -161,12 +161,14 @@ class LSQLocalization:
 
 
 
+
+
 if __name__ == "__main__":
     device = 'cpu'
-    loc = LSQLocalization(heatmapaxis=1, device=device)
-    val = torch.rand(4, 2, 128, 128)
+    loc = LSQLocalization(heatmapaxis=0, device=device)
+    val = torch.rand(4, 1, 128, 128, requires_grad=True)
 
-    val *= 0.0
-
-    _, mean, _ = loc.estimate(val)
-    a = 1
+    sigma, mean, amplitude = loc.estimate(val)
+    print(sigma[0].grad_fn)
+    print(mean[0].grad_fn)
+    print(amplitude[0].grad_fn)

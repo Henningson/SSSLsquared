@@ -524,40 +524,6 @@ class HLEDataset(Dataset):
         return image, seg, keypoints
 
 
-class JonathanDataset(Dataset):
-    def __init__(self, base_path, transform=None, is_train=True):
-        self.train_image_dir = os.path.join(base_path, "train_images")
-        self.train_label_dir = os.path.join(base_path, "train_masks", "all_4")
-        self.test_image_dir = os.path.join(base_path, "val_images")
-        self.test_label_dir = os.path.join(base_path, "val_masks", "all_4")
-        self.transform = transform
-
-        self.is_train = is_train
-
-        self.images = self.make_list(self.train_image_dir) if self.is_train else self.make_list(self.test_image_dir)
-        self.masks = self.make_list(self.train_label_dir) if self.is_train else self.make_list(self.test_label_dir)
-
-    def make_list(self, directory):
-        return [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, index):
-        img_path = self.images[index]
-        mask_path = self.masks[index]
-
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
-        seg = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-
-        if self.transform is not None:
-            augmentations = self.transform(image=image, mask=seg)
-            image = augmentations["image"]
-            seg = augmentations["mask"]
-
-        return image, seg
-
-
 class VideoDataset(Dataset):
     def __init__(self, path, videoname):
         self.image_dir = os.path.join(path, "png/")
@@ -604,51 +570,7 @@ class VideoDataset(Dataset):
             image = augmentations["image"]
         
         return image
-
-
-class ReinhardDataset(Dataset):
-    def __init__(self, base_path, transform=None, is_train=True, train_test_split=0.9):
-        self.image_dir = os.path.join(base_path, "png/")
-        self.laserpoints_dir = os.path.join(base_path, "laserpoints/")
-        self.transform = transform
-
-        self.is_train = is_train
-        self.train_test_split = 0.9
-
-        self.images = self.make_list(self.image_dir)
-        self.laserpoints = self.make_list(self.laserpoints_dir)
-
-    def make_list(self, directory):
-        file_list = [os.path.join(directory, file) for file in sorted(os.listdir(directory))]
-
-        if self.is_train:
-            file_list = file_list[:int(len(file_list) * self.train_test_split)]
-        else:
-            file_list = file_list[int(len(file_list) * self.train_test_split):]
-
-        return file_list
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, index):
-        img_path = self.images[index]
-        mask_path = self.laserpoints[index]
-
-        image = np.array(Image.open(img_path).convert("L"), dtype=np.float32) / 255.0
-        mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
-        mask[mask == 255.0] = 1.0
-
-        if self.transform is not None:
-            augmentations = self.transform(image=image, mask=mask)
-            image = augmentations["image"]
-            mask = augmentations["mask"]
-
-        # Set class labels
-        x = np.zeros(mask.shape, dtype=np.float32)
-        x[mask == 1.0] = 1
-
-        return image, x
+    
 
 if __name__ == "__main__":
     from tqdm import tqdm
