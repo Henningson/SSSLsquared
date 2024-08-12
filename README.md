@@ -21,7 +21,7 @@ The vocal fold segmentations were integrated into the original repository and ca
 ## Prerequisites
 Make sure that you have a Python version >=3.5 installed.
 A CUDA capable GPU is recommended, but not necessary.
-However, note that inference times are most definitely higher, and training a network from is not recommended.
+However, note that inference times are most definitely higher, and I wouldn't recommend training a network from scratch.
 
 ## Installation
 We supply a environment.yaml inside this folder.
@@ -47,7 +47,6 @@ The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni
 If you want the other models as well, please contact me.  
 Uploading every model easily spends all of my available cloud space that I get from the university, lol. 
 
-<<<<<<< HEAD
 
 ## Training a Network from Scratch
 If your directory structure looks like the following:
@@ -56,11 +55,9 @@ root_dir
 - SSSLsquared
 - HLEDataset
 ```
-you can train a network via:  
+You can train a network using the config-files inside the ```configs``` folder via:  
 ```python train.py --config configs/UNet/CFCM_split.yml --dataset_path ../HLEDataset/dataset/```.
 
-=======
->>>>>>> 36f15663b84c61cce40704a201200bee3a339392
 ## Visualizing Results
 ![Inference Viewer](assets/InferenceViewer.png)
 We supply a Viewer that you can use to visualize the predictions of the trained networks.
@@ -75,13 +72,6 @@ You can use it via ```inference.py```, with
 ## Evaluating a Network
 Can be done using ```evaluate.py```.
 
-<<<<<<< HEAD
-
-you can train a network using the supplied config files in the ```configs``` folder.
-For example
-```python train.py --config configs/UNet/CFCM_split.yml --dataset_path ../HLEDataset/dataset/```
-
-=======
 ## Things to note
 We are currently in the process of heavily refactoring this code. The most recent version can be found in the **refactor** branch. 
 The Gaussian regression code can be found in `models/LSQ.py`. 👍
@@ -94,7 +84,12 @@ The Gaussian regression code can be found in `models/LSQ.py`. 👍
 | U-Net[18]  | **0.92** ± 0.08 | **0.88** ± 0.04 | **0.68** ± 0.08 | **0.88** ± 0.02 | 4.54 ± 0.03     | 220 |
 | Sharan[21] | 0.17 ± 0.19 | 0.16 ± 0.17 |             |             | 5.97 ± 0.25     | 168 |
 | 2.5D U-Net | 0.90 ± 0.08 | 0.81 ± 0.05 | 0.65 ± 0.06 | 0.87 ± 0.02 | **1.08** ± 0.01     | **926** |
->>>>>>> 36f15663b84c61cce40704a201200bee3a339392
+
+
+you can train a network using the supplied config files in the ```configs``` folder.
+For example
+```python train.py --config configs/UNet/CFCM_split.yml --dataset_path ../HLEDataset/dataset/```
+
 
 ## Citation
 Please cite this paper, if this work helps you with your research:
@@ -109,9 +104,4 @@ booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 
 isbn="978-3-031-43987-2"
 }
 ```
-<<<<<<< HEAD
 A PDF is included in the `assets/` Folder of this repository.
-=======
-A PDF of the Paper will be included in the `assets/` Folder of this repository.
-However, you can also find it <a href="https://google.com/">here</a> (at a later point in time).
->>>>>>> 36f15663b84c61cce40704a201200bee3a339392
