@@ -95,10 +95,7 @@ For example
 Please cite this paper, if this work helps you with your research:
 ```
 @InProceedings{HenningsonSegAndLocalize2023,
-author="Henningson, Jann-Ole
-and Semmler, Marion
-and D{\"o}llinger, Michael
-and Stamminger, Marc",
+author="Henningson, Jann-Ole and Semmler, Marion and D{\"o}llinger, Michael and Stamminger, Marc",
 title="Joint Segmentation and Sub-pixel Localization in Structured Light Laryngoscopy",
 booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 2023",
 isbn="978-3-031-43987-2"
