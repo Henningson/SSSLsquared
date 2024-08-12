@@ -33,12 +33,36 @@ However, note that inference times are most definitely higher, and training a ne
 We supply a environment.yaml inside this folder.
 You can use this to easily setup a conda environment using  
 ```conda env create -f environment.yml```
+or set up a conda environment manually via:  
+```
+conda create --name SSSLsquared python=3.10
+conda activate SSSLsquared
+
+# Torch
+pip install torch torchvision torchaudio
+
+# Visualization, metrics, io and git-helper
+pip install pyyaml gitpython imageio imageio-ffmpeg kornia matplotlib moviepy opencv-python-headless pygit2 pyqt5 pyqt-darktheme pywavelets scikit-learn scikit-image scikit-video scipy torchmetrics chamferdist tqdm
+
+# Packages with specific versions
+pip install albumentations==1.3.0 kornia==0.6.8 torchmetrics==0.10.3
+```
 
 ## Pretrained Models
 The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni-erlangen.de/getlink/fiC95rzuAZBzC1JjPo37uR/UNet.zip">here</a>.  
 If you want the other models as well, please contact me.  
 Uploading every model easily spends all of my available cloud space that I get from the university, lol. 
 
+
+## Training a Network from Scratch
+If your directory structure looks like the following:
+```
+root_dir
+- SSSLsquared
+- HLEDataset
+```
+you can train a network via:  
+```python train.py --config configs/UNet/CFCM_split.yml --dataset_path ../HLEDataset/dataset/```.
 
 ## Visualizing Results
 ![Inference Viewer](assets/InferenceViewer.png)
@@ -55,23 +79,23 @@ You can use it via ```inference.py```, with
 ## Evaluating a Network
 Can be done using ```evaluate.py```.
 
-## Training a Network from Scratch
-TODO.
 
-## Things to note
-We are currently in the process of heavily refactoring this code. The most recent version can be found in the **refactor** branch.
+you can train a network using the supplied config files in the ```configs``` folder.
+For example
+```python train.py --config configs/UNet/CFCM_split.yml --dataset_path ../HLEDataset/dataset/```
+
 
 ## Citation
 Please cite this paper, if this work helps you with your research:
 ```
-@InProceedings{SegAndLocalize,
-  author="TBD",
-  title="TBD",
-  booktitle="TBD",
-  year="2023",
-  pages="?",
-  isbn="?"
+@InProceedings{HenningsonSegAndLocalize2023,
+author="Henningson, Jann-Ole
+and Semmler, Marion
+and D{\"o}llinger, Michael
+and Stamminger, Marc",
+title="Joint Segmentation and Sub-pixel Localization in Structured Light Laryngoscopy",
+booktitle="Medical Image Computing and Computer Assisted Intervention -- MICCAI 2023",
+isbn="978-3-031-43987-2"
 }
 ```
-A PDF of the Paper will be included in the `assets/` Folder of this repository.
-However, you can also find it <a href="https://google.com/">here</a> (at a later point in time).
+A PDF is included in the `assets/` Folder of this repository.
