@@ -43,7 +43,7 @@ pip install albumentations==1.3.0 kornia==0.6.8 torchmetrics==0.10.3
 ```
 
 ## Pretrained Models
-The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni-erlangen.de/getlink/fiC95rzuAZBzC1JjPo37uR/UNet.zip">here</a>.  
+The five trained U-Net models can be downloaded <a href="https://faubox.rrze.uni-erlangen.de/getlink/fiJmfXgSo2Y6S6Leuuzdkc/UNet_New.zip">here</a>.  
 If you want the other models as well, please contact me.  
 Uploading every model easily spends all of my available cloud space that I get from the university, lol. 
 
